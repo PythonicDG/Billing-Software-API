@@ -1,15 +1,22 @@
 from django.contrib import admin
-from .models import Product
+from .models import Product, Category
+
+
+@admin.register(Category)
+class CategoryAdmin(admin.ModelAdmin):
+    list_display = ('name', 'description', 'created_at')
+    search_fields = ('name', 'description')
+    ordering = ('name',)
 
 
 @admin.register(Product)
 class ProductAdmin(admin.ModelAdmin):
     list_display = (
-        'name', 'brand', 'selling_price', 
+        'name', 'category', 'brand', 'selling_price', 
         'stock_quantity', 'is_low_stock_status', 'is_active'
     )
-    list_filter = ('brand', 'is_active')
-    search_fields = ('name', 'brand', 'sku')
+    list_filter = ('category', 'brand', 'is_active')
+    search_fields = ('name', 'category__name', 'brand', 'sku')
     ordering = ('-created_at',)
     
     # Read-only fields in form

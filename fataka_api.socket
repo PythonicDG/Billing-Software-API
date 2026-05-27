@@ -1,0 +1,10 @@
+[Unit]
+Description=Gunicorn Socket for Vighnaharta Fataka API
+
+[Socket]
+# Bind to the standard Unix socket file. 
+# Systemd will automatically provision, manage, and assign permissions to this socket path.
+ListenStream=/run/fataka_api.sock
+
+[Install]
+WantedBy=sockets.target
