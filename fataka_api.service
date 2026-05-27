@@ -9,17 +9,17 @@ After=network.target
 # 'www-data' is the standard web-server user on Ubuntu/Debian, ensuring
 # proper read/write permissions to static files and sockets.
 # (If you cloned the repo in '/home/ubuntu/', you can change this to 'User=ubuntu')
-User=www-data
+User=ubuntu
 Group=www-data
 
 # --- Application Paths ---
 # The absolute path to the directory containing 'manage.py'
-WorkingDirectory=/var/www/vighnaharta_api
+WorkingDirectory=/home/ubuntu/fataka_app/Billing-Software-API
 
 # --- Execution Command ---
 # Triggers Gunicorn inside your virtual environment, using your custom configuration file.
-ExecStart=/var/www/vighnaharta_api/venv/bin/gunicorn \
-          -c /var/www/vighnaharta_api/fataka_gunicorn.conf.py \
+ExecStart=/home/ubuntu/fataka_app/Billing-Software-API/venv/bin/gunicorn \
+          -c /home/ubuntu/fataka_app/Billing-Software-API/fataka_gunicorn.conf.py \
           billing_api.wsgi:application
 
 # --- Process Lifecycles ---
