@@ -1,3 +1,376 @@
-from rest_framework import views
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import permissions, status
+from django.utils import timezone
+from django.db.models import Sum, F, Count, Q
+from datetime import datetime
 
-# To be implemented
+from billing.models import Invoice, InvoiceItem, Payment
+from products.models import Product
+from customers.models import Customer
+
+
+class DashboardSummaryView(APIView):
+    """
+    GET /api/dashboard/summary/
+    Returns today's sales stats, outstanding balance, low stock alerts,
+    and top 5 products sold today.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        today = timezone.now().date()
+
+        # Today's invoices
+        today_invoices = Invoice.objects.filter(created_at__date=today)
+        today_sales = today_invoices.aggregate(
+            total=Sum('grand_total')
+        )['total'] or 0
+
+        today_bill_count = today_invoices.count()
+
+        # Cash/UPI from Payment records made today
+        payment_agg = Payment.objects.filter(
+            payment_date__date=today
+        ).values('mode').annotate(total=Sum('amount'))
+
+        today_cash = 0
+        today_upi = 0
+        for entry in payment_agg:
+            if entry['mode'] == 'CASH':
+                today_cash = float(entry['total'] or 0)
+            elif entry['mode'] == 'UPI':
+                today_upi = float(entry['total'] or 0)
+
+        # Also count invoices paid in full at creation (no Payment records)
+        # These are invoices created today where amount_paid >= grand_total
+        # and they have zero Payment records — treat as CASH
+        fully_paid_at_creation = today_invoices.filter(
+            amount_paid__gte=F('grand_total')
+        ).annotate(
+            payment_count=Count('payments')
+        ).filter(payment_count=0)
+
+        for inv in fully_paid_at_creation:
+            today_cash += float(inv.amount_paid)
+
+        # Total outstanding across all unpaid/partial invoices (all-time)
+        total_outstanding = Invoice.objects.filter(
+            payment_status__in=['UNPAID', 'PARTIAL']
+        ).aggregate(
+            total=Sum(F('grand_total') - F('amount_paid'))
+        )['total'] or 0
+
+        # Low stock products
+        low_stock_qs = Product.objects.filter(
+            is_active=True,
+            stock_quantity__lte=F('min_stock_level')
+        ).values('id', 'name', 'brand', 'stock_quantity', 'min_stock_level')
+        low_stock_products = list(low_stock_qs)
+
+        # Top 5 products sold today by quantity
+        top_products = InvoiceItem.objects.filter(
+            invoice__created_at__date=today
+        ).values('product_name_snapshot').annotate(
+            total_quantity=Sum('quantity')
+        ).order_by('-total_quantity')[:5]
+        top_products_list = [
+            {
+                'product_name': item['product_name_snapshot'],
+                'total_quantity': item['total_quantity'],
+            }
+            for item in top_products
+        ]
+
+        return Response({
+            'today_sales': float(today_sales),
+            'today_cash': float(today_cash),
+            'today_upi': float(today_upi),
+            'today_bill_count': today_bill_count,
+            'total_outstanding': float(total_outstanding),
+            'low_stock_products': low_stock_products,
+            'top_products_today': top_products_list,
+        })
+
+
+class DailySalesView(APIView):
+    """
+    GET /api/reports/daily-sales/?date=YYYY-MM-DD
+    Returns all invoices for the given date with payment breakdown.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        date_str = request.query_params.get('date')
+        if date_str:
+            try:
+                report_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+            except ValueError:
+                return Response(
+                    {'error': 'Invalid date format. Use YYYY-MM-DD.'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+        else:
+            report_date = timezone.now().date()
+
+        invoices = Invoice.objects.filter(
+            created_at__date=report_date
+        ).select_related('customer').prefetch_related('payments', 'items').order_by('-created_at')
+
+        # Per-invoice data
+        invoices_data = []
+        total_sales = 0
+        total_cash = 0
+        total_upi = 0
+
+        for inv in invoices:
+            total_sales += float(inv.grand_total)
+
+            # Payment breakdown
+            payments_data = []
+            inv_cash = 0
+            inv_upi = 0
+            for p in inv.payments.all():
+                amount = float(p.amount)
+                if p.mode == 'CASH':
+                    inv_cash += amount
+                elif p.mode == 'UPI':
+                    inv_upi += amount
+                payments_data.append({
+                    'amount': amount,
+                    'mode': p.mode,
+                    'payment_date': p.payment_date.isoformat(),
+                    'notes': p.notes or '',
+                })
+
+            # If fully paid at creation with no payment records, count as CASH
+            if not payments_data and float(inv.amount_paid) >= float(inv.grand_total):
+                inv_cash = float(inv.amount_paid)
+
+            total_cash += inv_cash
+            total_upi += inv_upi
+
+            invoices_data.append({
+                'id': str(inv.id),
+                'invoice_number': inv.invoice_number,
+                'date': inv.created_at.isoformat(),
+                'customer_name': inv.customer.name if inv.customer else 'Walk-In',
+                'customer_phone': inv.customer.phone if inv.customer else '',
+                'total': float(inv.grand_total),
+                'paid': float(inv.amount_paid),
+                'outstanding': float(inv.outstanding_balance),
+                'payment_status': inv.payment_status,
+                'cash_amount': inv_cash,
+                'upi_amount': inv_upi,
+                'payments': payments_data,
+                'items': [
+                    {
+                        'product_name': item.product_name_snapshot,
+                        'quantity': item.quantity,
+                        'unit': item.unit,
+                        'unit_price': float(item.unit_price),
+                        'total_price': float(item.total_price),
+                    }
+                    for item in inv.items.all()
+                ],
+            })
+
+        return Response({
+            'date': str(report_date),
+            'total_sales': total_sales,
+            'total_cash': total_cash,
+            'total_upi': total_upi,
+            'bill_count': len(invoices_data),
+            'invoices': invoices_data,
+        })
+
+
+class OutstandingCustomersView(APIView):
+    """
+    GET /api/reports/outstanding/
+    Returns all customers with outstanding balance > 0, sorted descending.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        # Annotate each customer with their outstanding balance and unpaid bill count
+        customers = Customer.objects.annotate(
+            calc_outstanding=Sum(
+                F('invoices__grand_total') - F('invoices__amount_paid'),
+                filter=Q(invoices__payment_status__in=['UNPAID', 'PARTIAL'])
+            ),
+            unpaid_bill_count=Count(
+                'invoices',
+                filter=Q(invoices__payment_status__in=['UNPAID', 'PARTIAL'])
+            )
+        ).filter(
+            calc_outstanding__gt=0
+        ).order_by('-calc_outstanding')
+
+        customers_data = [
+            {
+                'id': str(c.id),
+                'name': c.name,
+                'phone': c.phone,
+                'outstanding_balance': float(c.calc_outstanding or 0),
+                'unpaid_bill_count': c.unpaid_bill_count or 0,
+            }
+            for c in customers
+        ]
+
+        total_outstanding = sum(c['outstanding_balance'] for c in customers_data)
+
+        return Response({
+            'total_outstanding': total_outstanding,
+            'customer_count': len(customers_data),
+            'customers': customers_data,
+        })
+
+
+class StockSummaryView(APIView):
+    """
+    GET /api/reports/stock-summary/
+    Returns all active products with stock info and value calculations.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        products = Product.objects.filter(is_active=True).order_by('name')
+
+        products_data = []
+        total_stock_value = 0
+        low_stock_count = 0
+
+        for p in products:
+            stock_value = float(p.purchase_price) * p.stock_quantity
+            total_stock_value += stock_value
+            is_low = p.is_low_stock
+            if is_low:
+                low_stock_count += 1
+
+            products_data.append({
+                'id': str(p.id),
+                'name': p.name,
+                'brand': p.brand or '',
+                'sku': p.sku or '',
+                'stock_quantity': p.stock_quantity,
+                'min_stock_level': p.min_stock_level,
+                'purchase_price': float(p.purchase_price),
+                'selling_price': float(p.selling_price),
+                'stock_value': stock_value,
+                'is_low_stock': is_low,
+            })
+
+        return Response({
+            'total_products': len(products_data),
+            'low_stock_count': low_stock_count,
+            'total_stock_value': total_stock_value,
+            'products': products_data,
+        })
+
+
+class CustomerSalesView(APIView):
+    """
+    GET /api/reports/customer-sales/?customer_id=X&from=YYYY-MM-DD&to=YYYY-MM-DD
+    Returns all invoices for a customer within a date range.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        customer_id = request.query_params.get('customer_id')
+        from_date = request.query_params.get('from')
+        to_date = request.query_params.get('to')
+
+        if not customer_id:
+            return Response(
+                {'error': 'customer_id is required.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            customer = Customer.objects.get(id=customer_id)
+        except Customer.DoesNotExist:
+            return Response(
+                {'error': 'Customer not found.'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        invoices = customer.invoices.all().order_by('-created_at')
+
+        if from_date:
+            try:
+                from_dt = datetime.strptime(from_date, '%Y-%m-%d').date()
+                invoices = invoices.filter(created_at__date__gte=from_dt)
+            except ValueError:
+                return Response(
+                    {'error': 'Invalid from date format. Use YYYY-MM-DD.'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+        if to_date:
+            try:
+                to_dt = datetime.strptime(to_date, '%Y-%m-%d').date()
+                invoices = invoices.filter(created_at__date__lte=to_dt)
+            except ValueError:
+                return Response(
+                    {'error': 'Invalid to date format. Use YYYY-MM-DD.'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+        invoices = invoices.prefetch_related('payments', 'items')
+
+        total_billed = 0
+        total_paid = 0
+        total_outstanding = 0
+        invoices_data = []
+
+        for inv in invoices:
+            billed = float(inv.grand_total)
+            paid = float(inv.amount_paid)
+            outstanding = float(inv.outstanding_balance)
+            total_billed += billed
+            total_paid += paid
+            total_outstanding += outstanding
+
+            payments_data = [
+                {
+                    'amount': float(p.amount),
+                    'mode': p.mode,
+                    'payment_date': p.payment_date.isoformat(),
+                    'notes': p.notes or '',
+                }
+                for p in inv.payments.all()
+            ]
+
+            invoices_data.append({
+                'id': str(inv.id),
+                'invoice_number': inv.invoice_number,
+                'date': inv.created_at.isoformat(),
+                'total': billed,
+                'paid': paid,
+                'outstanding': outstanding,
+                'payment_status': inv.payment_status,
+                'payments': payments_data,
+                'items': [
+                    {
+                        'product_name': item.product_name_snapshot,
+                        'quantity': item.quantity,
+                        'unit': item.unit,
+                        'unit_price': float(item.unit_price),
+                        'total_price': float(item.total_price),
+                    }
+                    for item in inv.items.all()
+                ],
+            })
+
+        return Response({
+            'customer_name': customer.name,
+            'customer_phone': customer.phone,
+            'from_date': from_date or '',
+            'to_date': to_date or '',
+            'total_billed': total_billed,
+            'total_paid': total_paid,
+            'total_outstanding': total_outstanding,
+            'invoice_count': len(invoices_data),
+            'invoices': invoices_data,
+        })
