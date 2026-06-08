@@ -14,6 +14,7 @@ class ProductSerializer(serializers.ModelSerializer):
     is_low_stock = serializers.ReadOnlyField()
     category = serializers.PrimaryKeyRelatedField(queryset=Category.objects.all(), required=False, allow_null=True)
     category_name = serializers.CharField(source='category.name', read_only=True)
+    total_stock_in_cent = serializers.ReadOnlyField()
 
     class Meta:
         model = Product
@@ -21,5 +22,6 @@ class ProductSerializer(serializers.ModelSerializer):
             'id', 'name', 'brand', 'sku', 
             'purchase_price', 'selling_price', 'mrp', 
             'stock_quantity', 'min_stock_level', 'image',
-            'is_low_stock', 'category', 'category_name', 'is_active', 'created_at'
+            'is_low_stock', 'category', 'category_name', 'is_active', 'created_at',
+            'no_of_case', 'cent_in_per_cs', 'total_stock_in_cent'
         ]

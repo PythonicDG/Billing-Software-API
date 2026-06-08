@@ -55,6 +55,8 @@ class Product(models.Model):
     # Inventory
     stock_quantity = models.IntegerField(default=0)
     min_stock_level = models.IntegerField(default=5, help_text="Alert when stock falls below this number")
+    no_of_case = models.IntegerField(default=0)
+    cent_in_per_cs = models.IntegerField(default=0)
     
     # Status
     image = models.ImageField(upload_to='products/', blank=True, null=True, help_text="Product photo (optional)")
@@ -66,6 +68,7 @@ class Product(models.Model):
         """Auto-generate SKU if it's not provided."""
         if not self.sku:
             self.sku = generate_unique_sku()
+        self.stock_quantity = (self.no_of_case or 0) * (self.cent_in_per_cs or 0) * 10
         super().save(*args, **kwargs)
 
     def __str__(self):
@@ -74,3 +77,7 @@ class Product(models.Model):
     @property
     def is_low_stock(self):
         return self.stock_quantity <= self.min_stock_level
+
+    @property
+    def total_stock_in_cent(self):
+        return self.stock_quantity / 10
