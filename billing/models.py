@@ -85,8 +85,9 @@ class InvoiceItem(models.Model):
 
     def save(self, *args, **kwargs):
         if self.product:
-            self.product_name_snapshot = self.product.name
-            self.sku_snapshot = self.product.sku
+            brand_str = f" ({self.product.brand})" if self.product.brand else ""
+            self.product_name_snapshot = f"{self.product.name}{brand_str}"
+            self.sku_snapshot = self.product.sku or ""
         
         # Calculate total price for this item
         # If 'CENT' is selected, 1 unit means 10 pieces.
