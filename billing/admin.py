@@ -8,7 +8,7 @@ class InvoiceItemInline(admin.TabularInline):
 
 @admin.register(Invoice)
 class InvoiceAdmin(admin.ModelAdmin):
-    list_display = ("invoice_number", "customer", "grand_total", "paid_amount", "payment_status", "created_at")
+    list_display = ("invoice_number", "customer", "grand_total", "amount_paid", "payment_status", "created_at")
     list_filter = ("payment_status", "payment_method", "created_at")
     search_fields = ("invoice_number", "customer__name", "customer__phone")
     inlines = [InvoiceItemInline]

@@ -12,3 +12,12 @@ class Customer(models.Model):
 
     def __str__(self):
         return f"{self.name} ({self.phone})"
+
+    @property
+    def outstanding_balance(self):
+        from django.db.models import Sum, F
+        res = self.invoices.aggregate(
+            total=Sum(F('grand_total') - F('amount_paid'))
+        )
+        val = res.get('total')
+        return float(val) if val is not None else 0.0

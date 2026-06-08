@@ -6,7 +6,7 @@ from core.authentication import QueryParameterTokenAuthentication
 from django.db import transaction
 from django.http import HttpResponse
 from .models import Invoice, InvoiceItem
-from .serializers import InvoiceSerializer, InvoiceItemSerializer
+from .serializers import InvoiceSerializer, InvoiceItemSerializer, PaymentSerializer
 from products.models import Product
 
 # Import for PDF generation
@@ -134,6 +134,36 @@ class InvoiceViewSet(viewsets.ModelViewSet):
         response.write(pdf)
         
         return response
+
+    @action(detail=True, methods=['POST'], permission_classes=[permissions.IsAuthenticated])
+    def payments(self, request, pk=None):
+        """
+        Record a payment against this invoice.
+        """
+        invoice = self.get_object()
+        # Ensure we pass invoice to validated data context or read it
+        data = request.data.copy()
+        data['invoice'] = invoice.id
+        
+        serializer = PaymentSerializer(data=data)
+        serializer.is_valid(raise_exception=True)
+        
+        amount = serializer.validated_data['amount']
+        
+        if amount <= 0:
+            return Response(
+                {'amount': ['Payment amount must be greater than zero.']},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+            
+        with transaction.atomic():
+            payment = serializer.save()
+            
+            # Update amount_paid on invoice
+            invoice.amount_paid += amount
+            invoice.save()
+            
+        return Response(PaymentSerializer(payment).data, status=status.HTTP_201_CREATED)
 
 class InvoiceItemViewSet(viewsets.ReadOnlyModelViewSet):
     """Mostly for historical lookup or reporting."""

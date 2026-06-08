@@ -1,9 +1,15 @@
 from rest_framework import serializers
-from .models import Invoice, InvoiceItem
-from products.models import Product
-from customers.models import Customer
 from django.db import transaction
 from django.db.models import F
+from products.models import Product
+from customers.models import Customer
+from .models import Invoice, InvoiceItem, Payment
+
+class PaymentSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Payment
+        fields = ['id', 'invoice', 'amount', 'mode', 'payment_date', 'notes']
+        read_only_fields = ['id', 'payment_date']
 
 class InvoiceItemSerializer(serializers.ModelSerializer):
     class Meta:
@@ -15,16 +21,17 @@ class InvoiceSerializer(serializers.ModelSerializer):
     items = InvoiceItemSerializer(many=True)
     customer_phone = serializers.CharField(write_only=True, required=False)
     customer_name = serializers.CharField(write_only=True, required=False)
+    paid_amount = serializers.DecimalField(source='amount_paid', max_digits=12, decimal_places=2, required=False)
 
     class Meta:
         model = Invoice
         fields = [
             'id', 'invoice_number', 'customer', 'customer_phone', 'customer_name',
             'sub_total', 'tax_amount', 'discount_amount', 'grand_total',
-            'paid_amount', 'due_amount', 'payment_status', 'payment_method',
-            'items', 'created_by', 'created_at'
+            'paid_amount', 'amount_paid', 'total_amount', 'due_amount', 'outstanding_balance',
+            'payment_status', 'payment_method', 'items', 'created_by', 'created_at'
         ]
-        read_only_fields = ['invoice_number', 'due_amount', 'payment_status', 'created_by', 'created_at']
+        read_only_fields = ['invoice_number', 'due_amount', 'outstanding_balance', 'payment_status', 'created_by', 'created_at']
 
     def create(self, validated_data):
         items_data = validated_data.pop('items')

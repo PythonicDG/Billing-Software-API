@@ -7,7 +7,7 @@ from django.utils import timezone
 
 class Invoice(models.Model):
     PAYMENT_STATUS_CHOICES = [
-        ('PENDING', 'Pending'),
+        ('UNPAID', 'Unpaid'),
         ('PARTIAL', 'Partially Paid'),
         ('PAID', 'Paid'),
     ]
@@ -30,8 +30,8 @@ class Invoice(models.Model):
     grand_total = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
     
     # Payment info
-    paid_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
-    payment_status = models.CharField(max_length=20, choices=PAYMENT_STATUS_CHOICES, default='PENDING')
+    amount_paid = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
+    payment_status = models.CharField(max_length=20, choices=PAYMENT_STATUS_CHOICES, default='UNPAID')
     payment_method = models.CharField(max_length=20, choices=PAYMENT_METHOD_CHOICES, default='CASH')
     
     # Metadata
@@ -47,12 +47,12 @@ class Invoice(models.Model):
             self.invoice_number = f"INV-{today}-{count:04d}"
         
         # Calculate payment status
-        if self.paid_amount >= self.grand_total:
+        if self.amount_paid >= self.grand_total:
             self.payment_status = 'PAID'
-        elif self.paid_amount > 0:
+        elif self.amount_paid > 0:
             self.payment_status = 'PARTIAL'
         else:
-            self.payment_status = 'PENDING'
+            self.payment_status = 'UNPAID'
 
         super().save(*args, **kwargs)
 
@@ -62,7 +62,26 @@ class Invoice(models.Model):
     @property
     def due_amount(self):
         """Returns the remaining amount to be paid."""
-        return max(0, self.grand_total - self.paid_amount)
+        return max(0, self.grand_total - self.amount_paid)
+
+    @property
+    def total_amount(self):
+        """Alias for grand_total to support ledger naming standard."""
+        return self.grand_total
+
+    @property
+    def outstanding_balance(self):
+        """Returns the outstanding balance (total_amount - amount_paid)."""
+        return self.due_amount
+
+    @property
+    def paid_amount(self):
+        """Property to support legacy templates/code expecting paid_amount."""
+        return self.amount_paid
+
+    @paid_amount.setter
+    def paid_amount(self, value):
+        self.amount_paid = value
 
 class InvoiceItem(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -102,3 +121,19 @@ class InvoiceItem(models.Model):
 
     def __str__(self):
         return f"{self.product_name_snapshot} ({self.quantity} {self.get_unit_display()}) - {self.invoice.invoice_number}"
+
+class Payment(models.Model):
+    PAYMENT_MODE_CHOICES = [
+        ('CASH', 'Cash'),
+        ('UPI', 'UPI'),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    invoice = models.ForeignKey(Invoice, on_delete=models.CASCADE, related_name='payments')
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    mode = models.CharField(max_length=10, choices=PAYMENT_MODE_CHOICES)
+    payment_date = models.DateTimeField(default=timezone.now)
+    notes = models.TextField(blank=True, null=True)
+
+    def __str__(self):
+        return f"Payment of {self.amount} for {self.invoice.invoice_number} ({self.mode})"
