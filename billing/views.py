@@ -8,6 +8,7 @@ from django.http import HttpResponse
 from .models import Invoice, InvoiceItem
 from .serializers import InvoiceSerializer, InvoiceItemSerializer, PaymentSerializer
 from products.models import Product
+from django.db.models import F
 
 # Import for PDF generation
 import io
@@ -164,6 +165,20 @@ class InvoiceViewSet(viewsets.ModelViewSet):
             invoice.save()
             
         return Response(PaymentSerializer(payment).data, status=status.HTTP_201_CREATED)
+
+    @transaction.atomic
+    def destroy(self, request, *args, **kwargs):
+        instance = self.get_object()
+        
+        # Restore stock for each item in the invoice
+        for item in instance.items.all():
+            if item.product:
+                effective_quantity = item.quantity * 10 if item.unit == 'CENT' else item.quantity
+                Product.objects.filter(id=item.product.id).update(
+                    stock_quantity=F('stock_quantity') + effective_quantity
+                )
+                
+        return super().destroy(request, *args, **kwargs)
 
 class InvoiceItemViewSet(viewsets.ReadOnlyModelViewSet):
     """Mostly for historical lookup or reporting."""
