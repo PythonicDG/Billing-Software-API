@@ -111,12 +111,21 @@ class DashboardSummaryView(APIView):
             total=Sum(F('grand_total') - F('amount_paid'))
         )['total'] or 0
 
-        # Low stock products
-        low_stock_qs = Product.objects.filter(
-            is_active=True,
-            stock_quantity__lte=F('min_stock_level') * 10
-        ).values('id', 'name', 'brand', 'stock_quantity', 'min_stock_level')
-        low_stock_products = list(low_stock_qs)
+        # Low stock products - compute using Python property to avoid unit mismatch in SQL
+        all_products = Product.objects.filter(is_active=True).values(
+            'id', 'name', 'brand', 'stock_quantity', 'min_stock_level'
+        )
+        low_stock_products = []
+        all_stock_products = []
+        for p in all_products:
+            stock_in_cent = p['stock_quantity'] / 10.0
+            min_level = p['min_stock_level']
+            is_low = stock_in_cent <= min_level
+            p['total_stock_in_cent'] = round(stock_in_cent, 1)
+            p['is_low_stock'] = is_low
+            all_stock_products.append(p)
+            if is_low:
+                low_stock_products.append(p)
 
         # Top 5 products sold in range
         top_products = InvoiceItem.objects.filter(
@@ -139,6 +148,7 @@ class DashboardSummaryView(APIView):
             'today_bill_count': range_bill_count,
             'total_outstanding': float(total_outstanding),
             'low_stock_products': low_stock_products,
+            'all_stock_products': all_stock_products,
             'top_products_today': top_products_list,
             'sales_label': sales_label,
             'cash_label': cash_label,
