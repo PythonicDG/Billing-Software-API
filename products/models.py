@@ -65,10 +65,26 @@ class Product(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     def save(self, *args, **kwargs):
-        """Auto-generate SKU if it's not provided."""
+        """Auto-generate SKU if it's not provided. Only recalculate stock when case/cent fields change."""
         if not self.sku:
             self.sku = generate_unique_sku()
-        self.stock_quantity = (self.no_of_case or 0) * (self.cent_in_per_cs or 0) * 10
+        
+        # Only recalculate stock_quantity for brand new products (no PK yet).
+        # For updates, preserve the current stock_quantity (which may have been 
+        # reduced by invoice sales) UNLESS no_of_case or cent_in_per_cs changed.
+        if not self.pk:
+            # New product: calculate initial stock
+            self.stock_quantity = (self.no_of_case or 0) * (self.cent_in_per_cs or 0) * 10
+        else:
+            # Existing product: only recalculate if stock-related fields changed
+            try:
+                old = Product.objects.get(pk=self.pk)
+                if old.no_of_case != self.no_of_case or old.cent_in_per_cs != self.cent_in_per_cs:
+                    self.stock_quantity = (self.no_of_case or 0) * (self.cent_in_per_cs or 0) * 10
+                # else: preserve the current stock_quantity as-is
+            except Product.DoesNotExist:
+                self.stock_quantity = (self.no_of_case or 0) * (self.cent_in_per_cs or 0) * 10
+        
         super().save(*args, **kwargs)
 
     def __str__(self):
