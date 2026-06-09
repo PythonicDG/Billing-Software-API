@@ -74,7 +74,7 @@ class DashboardSummaryView(APIView):
             top_label = "TOP PRODUCTS TODAY"
 
         # Filter invoices for range
-        range_invoices = Invoice.objects.filter(date_filter)
+        range_invoices = Invoice.objects.filter(date_filter).prefetch_related('payments')
         range_sales = range_invoices.aggregate(
             total=Sum('grand_total')
         )['total'] or 0
@@ -94,15 +94,16 @@ class DashboardSummaryView(APIView):
             elif entry['mode'] == 'UPI':
                 range_upi = float(entry['total'] or 0)
 
-        # Also count invoices paid in full at creation (no Payment records)
-        fully_paid_at_creation = range_invoices.filter(
-            amount_paid__gte=F('grand_total')
-        ).annotate(
-            payment_count=Count('payments')
-        ).filter(payment_count=0)
-
-        for inv in fully_paid_at_creation:
-            range_cash += float(inv.amount_paid)
+        # Count initial payments made at invoice creation in the range (includes fully paid and partial payments)
+        for inv in range_invoices:
+            payments_sum = sum(p.amount for p in inv.payments.all())
+            initial_paid = float(inv.amount_paid) - float(payments_sum)
+            if initial_paid > 0:
+                if inv.payment_method == 'UPI':
+                    range_upi += initial_paid
+                else:
+                    # Treat CASH, CARD, ONLINE, etc. under cash or cash-equivalent for simplicity
+                    range_cash += initial_paid
 
         # Total outstanding across all unpaid/partial invoices (all-time)
         total_outstanding = Invoice.objects.filter(
@@ -195,8 +196,10 @@ class DailySalesView(APIView):
             payments_data = []
             inv_cash = 0
             inv_upi = 0
+            payments_sum = 0.0
             for p in inv.payments.all():
                 amount = float(p.amount)
+                payments_sum += amount
                 if p.mode == 'CASH':
                     inv_cash += amount
                 elif p.mode == 'UPI':
@@ -208,9 +211,13 @@ class DailySalesView(APIView):
                     'notes': p.notes or '',
                 })
 
-            # If fully paid at creation with no payment records, count as CASH
-            if not payments_data and float(inv.amount_paid) >= float(inv.grand_total):
-                inv_cash = float(inv.amount_paid)
+            # Add initial payment made at invoice creation
+            initial_paid = float(inv.amount_paid) - payments_sum
+            if initial_paid > 0:
+                if inv.payment_method == 'UPI':
+                    inv_upi += initial_paid
+                else:
+                    inv_cash += initial_paid
 
             total_cash += inv_cash
             total_upi += inv_upi
