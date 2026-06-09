@@ -3,7 +3,7 @@ from rest_framework.response import Response
 from rest_framework import permissions, status
 from django.utils import timezone
 from django.db.models import Sum, F, Count, Q
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from billing.models import Invoice, InvoiceItem, Payment
 from products.models import Product
@@ -19,40 +19,90 @@ class DashboardSummaryView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request):
-        today = timezone.now().date()
+        range_val = request.query_params.get('range', 'today').lower()
+        now = timezone.now()
+        
+        # Calculate date thresholds
+        if range_val == 'weekly':
+            from_date = (now - timedelta(days=7)).date()
+            date_filter = Q(created_at__date__gte=from_date)
+            payment_date_filter = Q(payment_date__date__gte=from_date)
+            item_filter = Q(invoice__created_at__date__gte=from_date)
+            sales_label = "WEEKLY SALES"
+            cash_label = "WEEKLY CASH"
+            upi_label = "WEEKLY UPI"
+            bills_label = "BILLS (WEEK)"
+            top_label = "TOP PRODUCTS (WEEK)"
+        elif range_val == 'monthly':
+            from_date = (now - timedelta(days=30)).date()
+            date_filter = Q(created_at__date__gte=from_date)
+            payment_date_filter = Q(payment_date__date__gte=from_date)
+            item_filter = Q(invoice__created_at__date__gte=from_date)
+            sales_label = "MONTHLY SALES"
+            cash_label = "MONTHLY CASH"
+            upi_label = "MONTHLY UPI"
+            bills_label = "BILLS (MONTH)"
+            top_label = "TOP PRODUCTS (MONTH)"
+        elif range_val == 'yearly':
+            from_date = (now - timedelta(days=365)).date()
+            date_filter = Q(created_at__date__gte=from_date)
+            payment_date_filter = Q(payment_date__date__gte=from_date)
+            item_filter = Q(invoice__created_at__date__gte=from_date)
+            sales_label = "ANNUAL SALES"
+            cash_label = "ANNUAL CASH"
+            upi_label = "ANNUAL UPI"
+            bills_label = "BILLS (YEAR)"
+            top_label = "TOP PRODUCTS (YEAR)"
+        elif range_val == 'all_time':
+            date_filter = Q()
+            payment_date_filter = Q()
+            item_filter = Q()
+            sales_label = "ALL-TIME SALES"
+            cash_label = "ALL-TIME CASH"
+            upi_label = "ALL-TIME UPI"
+            bills_label = "ALL-TIME BILLS"
+            top_label = "TOP PRODUCTS (ALL TIME)"
+        else: # today
+            today = now.date()
+            date_filter = Q(created_at__date=today)
+            payment_date_filter = Q(payment_date__date=today)
+            item_filter = Q(invoice__created_at__date=today)
+            sales_label = "TODAY'S SALES"
+            cash_label = "TODAY'S CASH"
+            upi_label = "TODAY'S UPI"
+            bills_label = "BILLS TODAY"
+            top_label = "TOP PRODUCTS TODAY"
 
-        # Today's invoices
-        today_invoices = Invoice.objects.filter(created_at__date=today)
-        today_sales = today_invoices.aggregate(
+        # Filter invoices for range
+        range_invoices = Invoice.objects.filter(date_filter)
+        range_sales = range_invoices.aggregate(
             total=Sum('grand_total')
         )['total'] or 0
 
-        today_bill_count = today_invoices.count()
+        range_bill_count = range_invoices.count()
 
-        # Cash/UPI from Payment records made today
+        # Cash/UPI from Payment records made in range
         payment_agg = Payment.objects.filter(
-            payment_date__date=today
+            payment_date_filter
         ).values('mode').annotate(total=Sum('amount'))
 
-        today_cash = 0
-        today_upi = 0
+        range_cash = 0
+        range_upi = 0
         for entry in payment_agg:
             if entry['mode'] == 'CASH':
-                today_cash = float(entry['total'] or 0)
+                range_cash = float(entry['total'] or 0)
             elif entry['mode'] == 'UPI':
-                today_upi = float(entry['total'] or 0)
+                range_upi = float(entry['total'] or 0)
 
         # Also count invoices paid in full at creation (no Payment records)
-        # These are invoices created today where amount_paid >= grand_total
-        # and they have zero Payment records — treat as CASH
-        fully_paid_at_creation = today_invoices.filter(
+        fully_paid_at_creation = range_invoices.filter(
             amount_paid__gte=F('grand_total')
         ).annotate(
             payment_count=Count('payments')
         ).filter(payment_count=0)
 
         for inv in fully_paid_at_creation:
-            today_cash += float(inv.amount_paid)
+            range_cash += float(inv.amount_paid)
 
         # Total outstanding across all unpaid/partial invoices (all-time)
         total_outstanding = Invoice.objects.filter(
@@ -68,9 +118,9 @@ class DashboardSummaryView(APIView):
         ).values('id', 'name', 'brand', 'stock_quantity', 'min_stock_level')
         low_stock_products = list(low_stock_qs)
 
-        # Top 5 products sold today by quantity
+        # Top 5 products sold in range
         top_products = InvoiceItem.objects.filter(
-            invoice__created_at__date=today
+            item_filter
         ).values('product_name_snapshot').annotate(
             total_quantity=Sum('quantity')
         ).order_by('-total_quantity')[:5]
@@ -83,13 +133,18 @@ class DashboardSummaryView(APIView):
         ]
 
         return Response({
-            'today_sales': float(today_sales),
-            'today_cash': float(today_cash),
-            'today_upi': float(today_upi),
-            'today_bill_count': today_bill_count,
+            'today_sales': float(range_sales),
+            'today_cash': float(range_cash),
+            'today_upi': float(range_upi),
+            'today_bill_count': range_bill_count,
             'total_outstanding': float(total_outstanding),
             'low_stock_products': low_stock_products,
             'top_products_today': top_products_list,
+            'sales_label': sales_label,
+            'cash_label': cash_label,
+            'upi_label': upi_label,
+            'bills_label': bills_label,
+            'top_label': top_label,
         })
 
 

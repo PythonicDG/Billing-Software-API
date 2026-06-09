@@ -3,38 +3,23 @@ from rest_framework.permissions import BasePermission
 
 class IsOwner(BasePermission):
     """
-    Allows access only to users whose role is OWNER.
+    Allows access only to authenticated users.
     """
     def has_permission(self, request, view):
-        return (
-            request.user
-            and request.user.is_authenticated
-            and request.user.role == 'OWNER'
-        )
+        return request.user and request.user.is_authenticated
 
 
 class IsStaff(BasePermission):
     """
-    Allows access only to users whose role is STAFF.
+    Allows access only to authenticated users.
     """
     def has_permission(self, request, view):
-        return (
-            request.user
-            and request.user.is_authenticated
-            and request.user.role == 'STAFF'
-        )
+        return request.user and request.user.is_authenticated
 
 
 class IsOwnerOrReadOnly(BasePermission):
     """
-    Allows read access to all, but only OWNER can modify.
+    Allows access to all authenticated users for any HTTP method.
     """
     def has_permission(self, request, view):
-        if request.method in ('GET', 'HEAD', 'OPTIONS'):
-            return request.user and request.user.is_authenticated
-        
-        return (
-            request.user 
-            and request.user.is_authenticated 
-            and request.user.role == 'OWNER'
-        )
+        return request.user and request.user.is_authenticated
