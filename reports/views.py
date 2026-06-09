@@ -114,7 +114,7 @@ class DashboardSummaryView(APIView):
         # Low stock products
         low_stock_qs = Product.objects.filter(
             is_active=True,
-            stock_quantity__lte=F('min_stock_level')
+            stock_quantity__lte=F('min_stock_level') * 10
         ).values('id', 'name', 'brand', 'stock_quantity', 'min_stock_level')
         low_stock_products = list(low_stock_qs)
 
