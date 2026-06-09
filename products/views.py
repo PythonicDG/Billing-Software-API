@@ -1,5 +1,9 @@
 from rest_framework import viewsets, filters, status
 from rest_framework.response import Response
+from rest_framework.decorators import action
+from django.http import HttpResponse
+import csv
+import io
 from rest_framework.pagination import PageNumberPagination
 
 from .models import Product, Category
@@ -65,3 +69,145 @@ class ProductViewSet(viewsets.ModelViewSet):
             'message': 'Product updated successfully.',
             'data': response.data
         }, status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=['get'], url_path='download_template')
+    def download_template(self, request):
+        """Generates and returns a CSV template for bulk product upload."""
+        response = HttpResponse(content_type='text/csv')
+        response['Content-Disposition'] = 'attachment; filename="products_template.csv"'
+        
+        writer = csv.writer(response)
+        writer.writerow([
+            'Name', 'Brand', 'Category', 'SKU', 'Purchase Price', 
+            'Selling Price', 'MRP', 'No Of Case', 'Cent In Per Case', 'Min Stock Level'
+        ])
+        writer.writerow([
+            'Standard Crackers 10in1', 'Standard', 'Crackers', '', '150.00',
+            '250.00', '300.00', '10', '5', '5'
+        ])
+        return response
+
+    @action(detail=False, methods=['post'], url_path='bulk_upload')
+    def bulk_upload(self, request):
+        """Parses an uploaded CSV file and performs bulk creation/updating of products."""
+        csv_file = request.FILES.get('file')
+        if not csv_file:
+            return Response(
+                {'success': False, 'error': 'No file was provided.'}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            file_data = csv_file.read().decode('utf-8-sig')
+            io_string = io.StringIO(file_data)
+            reader = csv.reader(io_string)
+            
+            header = next(reader, None)
+            if not header:
+                return Response(
+                    {'success': False, 'error': 'The uploaded file is empty.'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            headers_map = {name.strip().lower(): i for i, name in enumerate(header)}
+            
+            def get_val(row, field_name, default=''):
+                idx = headers_map.get(field_name.lower())
+                if idx is not None and idx < len(row):
+                    return row[idx].strip()
+                return default
+
+            created_count = 0
+            updated_count = 0
+            errors = []
+
+            from decimal import Decimal
+            from products.models import Category, Product
+
+            for row_idx, row in enumerate(reader, start=2):
+                if not row or not any(row):
+                    continue
+                
+                name = get_val(row, 'name')
+                selling_price_str = get_val(row, 'selling price')
+
+                if not name:
+                    errors.append(f"Row {row_idx}: Name is required.")
+                    continue
+                if not selling_price_str:
+                    errors.append(f"Row {row_idx}: Selling Price is required.")
+                    continue
+
+                try:
+                    selling_price = Decimal(selling_price_str)
+                except Exception:
+                    errors.append(f"Row {row_idx}: Invalid Selling Price '{selling_price_str}'.")
+                    continue
+
+                brand = get_val(row, 'brand')
+                category_name = get_val(row, 'category', 'General')
+                sku = get_val(row, 'sku')
+                
+                purchase_price_str = get_val(row, 'purchase price', '0.00')
+                mrp_str = get_val(row, 'mrp')
+                no_of_case_str = get_val(row, 'no of case', '0')
+                cent_in_per_cs_str = get_val(row, 'cent in per case', '0')
+                min_stock_str = get_val(row, 'min stock level', '5')
+
+                try:
+                    purchase_price = Decimal(purchase_price_str) if purchase_price_str else Decimal('0.00')
+                    mrp = Decimal(mrp_str) if mrp_str else None
+                    no_of_case = int(no_of_case_str) if no_of_case_str else 0
+                    cent_in_per_cs = int(cent_in_per_cs_str) if cent_in_per_cs_str else 0
+                    min_stock = int(min_stock_str) if min_stock_str else 5
+                except Exception as e:
+                    errors.append(f"Row {row_idx}: Formatting error in numbers: {e}")
+                    continue
+
+                category = None
+                if category_name:
+                    category, _ = Category.objects.get_or_create(name=category_name)
+
+                product = None
+                if sku:
+                    product = Product.objects.filter(sku=sku).first()
+
+                if product:
+                    product.name = name
+                    product.brand = brand
+                    product.category = category
+                    product.purchase_price = purchase_price
+                    product.selling_price = selling_price
+                    product.mrp = mrp
+                    product.no_of_case = no_of_case
+                    product.cent_in_per_cs = cent_in_per_cs
+                    product.min_stock_level = min_stock
+                    product.save()
+                    updated_count += 1
+                else:
+                    Product.objects.create(
+                        name=name,
+                        brand=brand,
+                        category=category,
+                        sku=sku if sku else None,
+                        purchase_price=purchase_price,
+                        selling_price=selling_price,
+                        mrp=mrp,
+                        no_of_case=no_of_case,
+                        cent_in_per_cs=cent_in_per_cs,
+                        min_stock_level=min_stock
+                    )
+                    created_count += 1
+
+            return Response({
+                'success': True,
+                'created_count': created_count,
+                'updated_count': updated_count,
+                'errors': errors
+            }, status=status.HTTP_200_OK if not errors else status.HTTP_207_MULTI_STATUS)
+
+        except Exception as e:
+            return Response(
+                {'success': False, 'error': f'Failed to process file: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
