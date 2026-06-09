@@ -39,6 +39,7 @@ class CustomerViewSet(viewsets.ModelViewSet):
                 'total': float(inv.total_amount),
                 'paid': float(inv.amount_paid),
                 'outstanding': float(outstanding),
+                'payment_method': inv.payment_method,
                 'payments': payments_data
             })
             
