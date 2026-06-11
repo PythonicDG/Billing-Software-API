@@ -2,10 +2,16 @@ from rest_framework import viewsets, permissions, filters, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.authentication import TokenAuthentication
+from rest_framework.pagination import PageNumberPagination
 from core.authentication import QueryParameterTokenAuthentication
 from .models import Customer
 from .serializers import CustomerSerializer
 from django.db import transaction, models
+
+class LedgerPagination(PageNumberPagination):
+    page_size = 20
+    page_size_query_param = 'page_size'
+    max_page_size = 100
 
 class CustomerViewSet(viewsets.ModelViewSet):
     queryset = Customer.objects.all().order_by('-created_at')
@@ -21,12 +27,14 @@ class CustomerViewSet(viewsets.ModelViewSet):
         customer = self.get_object()
         invoices = customer.invoices.all().order_by('-created_at')
         
-        bills_data = []
-        total_outstanding = 0
+        paginator = LedgerPagination()
+        page = paginator.paginate_queryset(invoices, request)
         
-        for inv in invoices:
+        invoices_to_process = page if page is not None else invoices
+        
+        bills_data = []
+        for inv in invoices_to_process:
             outstanding = inv.outstanding_balance
-            total_outstanding += outstanding
             payments_data = []
             for p in inv.payments.all():
                 payments_data.append({
@@ -47,12 +55,25 @@ class CustomerViewSet(viewsets.ModelViewSet):
                 'payments': payments_data
             })
             
-        return Response({
+        data = {
             'customer_name': customer.name,
             'customer_phone': customer.phone,
             'bills': bills_data,
-            'total_outstanding': float(total_outstanding)
-        })
+            'total_outstanding': float(customer.outstanding_balance)
+        }
+        
+        if page is not None:
+            return Response({
+                'count': paginator.page.paginator.count,
+                'next': paginator.get_next_link(),
+                'previous': paginator.get_previous_link(),
+                'customer_name': customer.name,
+                'customer_phone': customer.phone,
+                'bills': bills_data,
+                'total_outstanding': float(customer.outstanding_balance)
+            })
+
+        return Response(data)
 
     @action(detail=True, methods=['POST'])
     def record_bulk_payment(self, request, pk=None):
