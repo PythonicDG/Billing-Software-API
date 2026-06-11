@@ -87,6 +87,29 @@ class ProductViewSet(viewsets.ModelViewSet):
         ])
         return response
 
+    @action(detail=False, methods=['get'], url_path='frequent')
+    def frequent(self, request):
+        """Returns the top 10 most frequently sold products."""
+        from billing.models import InvoiceItem
+        from django.db.models import Sum
+        
+        # Get top product IDs from InvoiceItem
+        top_product_ids = InvoiceItem.objects.values('product').annotate(
+            total_sold=Sum('quantity')
+        ).order_by('-total_sold').values_list('product', flat=True)[:10]
+        
+        # Filter products that are in the top list and are active
+        products = Product.objects.filter(id__in=top_product_ids, is_active=True)
+        
+        # Sort them manually to maintain the 'total_sold' order
+        product_list = sorted(
+            products, 
+            key=lambda p: list(top_product_ids).index(p.id) if p.id in top_product_ids else 999
+        )
+        
+        serializer = self.get_serializer(product_list, many=True)
+        return Response(serializer.data)
+
     @action(detail=False, methods=['post'], url_path='bulk_upload')
     def bulk_upload(self, request):
         """Parses an uploaded CSV file and performs bulk creation/updating of products."""
