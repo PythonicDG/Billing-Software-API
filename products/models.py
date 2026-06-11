@@ -76,10 +76,13 @@ class Product(models.Model):
             # New product: calculate initial stock
             self.stock_quantity = (self.no_of_case or 0) * (self.cent_in_per_cs or 0) * 10
         else:
-            # Existing product: only recalculate if stock-related fields changed
+            # Existing product: recalculate if stock-related fields changed
+            # OR if it's currently out of stock (enables "Update" to act as a restock)
             try:
                 old = Product.objects.get(pk=self.pk)
-                if old.no_of_case != self.no_of_case or old.cent_in_per_cs != self.cent_in_per_cs:
+                if (old.no_of_case != self.no_of_case or 
+                    old.cent_in_per_cs != self.cent_in_per_cs or 
+                    (old.stock_quantity <= 0 and self.no_of_case > 0)):
                     self.stock_quantity = (self.no_of_case or 0) * (self.cent_in_per_cs or 0) * 10
                 # else: preserve the current stock_quantity as-is
             except Product.DoesNotExist:
