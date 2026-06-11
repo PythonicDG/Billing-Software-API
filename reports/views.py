@@ -2,7 +2,7 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import permissions, status
 from django.utils import timezone
-from django.db.models import Sum, F, Count, Q
+from django.db.models import Sum, F, Count, Q, ExpressionWrapper, FloatField, Case, When, Value
 from datetime import datetime, timedelta
 
 from billing.models import Invoice, InvoiceItem, Payment
@@ -22,6 +22,14 @@ class DashboardSummaryView(APIView):
         range_val = request.query_params.get('range', 'today').lower()
         now = timezone.now()
         
+        # Default labels
+        sales_label = "SALES"
+        profit_label = "EST. PROFIT"
+        cash_label = "CASH"
+        upi_label = "UPI"
+        bills_label = "BILLS"
+        top_label = "TOP PRODUCTS"
+
         # Calculate date thresholds
         if range_val == 'weekly':
             from_date = (now - timedelta(days=7)).date()
@@ -29,6 +37,7 @@ class DashboardSummaryView(APIView):
             payment_date_filter = Q(payment_date__date__gte=from_date)
             item_filter = Q(invoice__created_at__date__gte=from_date)
             sales_label = "WEEKLY SALES"
+            profit_label = "EST. PROFIT (WEEK)"
             cash_label = "WEEKLY CASH"
             upi_label = "WEEKLY UPI"
             bills_label = "BILLS (WEEK)"
@@ -39,6 +48,7 @@ class DashboardSummaryView(APIView):
             payment_date_filter = Q(payment_date__date__gte=from_date)
             item_filter = Q(invoice__created_at__date__gte=from_date)
             sales_label = "MONTHLY SALES"
+            profit_label = "EST. PROFIT (MONTH)"
             cash_label = "MONTHLY CASH"
             upi_label = "MONTHLY UPI"
             bills_label = "BILLS (MONTH)"
@@ -49,6 +59,7 @@ class DashboardSummaryView(APIView):
             payment_date_filter = Q(payment_date__date__gte=from_date)
             item_filter = Q(invoice__created_at__date__gte=from_date)
             sales_label = "ANNUAL SALES"
+            profit_label = "EST. PROFIT (YEAR)"
             cash_label = "ANNUAL CASH"
             upi_label = "ANNUAL UPI"
             bills_label = "BILLS (YEAR)"
@@ -58,6 +69,7 @@ class DashboardSummaryView(APIView):
             payment_date_filter = Q()
             item_filter = Q()
             sales_label = "ALL-TIME SALES"
+            profit_label = "ALL-TIME PROFIT"
             cash_label = "ALL-TIME CASH"
             upi_label = "ALL-TIME UPI"
             bills_label = "ALL-TIME BILLS"
@@ -68,18 +80,44 @@ class DashboardSummaryView(APIView):
             payment_date_filter = Q(payment_date__date=today)
             item_filter = Q(invoice__created_at__date=today)
             sales_label = "TODAY'S SALES"
+            profit_label = "EST. PROFIT TODAY"
             cash_label = "TODAY'S CASH"
             upi_label = "TODAY'S UPI"
             bills_label = "BILLS TODAY"
             top_label = "TOP PRODUCTS TODAY"
 
         # Filter invoices for range
-        range_invoices = Invoice.objects.filter(date_filter).prefetch_related('payments')
+        range_invoices = Invoice.objects.filter(date_filter).prefetch_related('payments', 'items', 'items__product')
         range_sales = range_invoices.aggregate(
             total=Sum('grand_total')
         )['total'] or 0
 
         range_bill_count = range_invoices.count()
+
+        # Calculate Gross Profit
+        # Profit = Total Sales - Cost of Goods Sold (COGS)
+        # COGS = Sum(item.quantity * item.product.purchase_price * (10 if unit==CENT else 1))
+        
+        # We can calculate this more efficiently using aggregation
+        range_profit_data = range_invoices.values('id').annotate(
+            invoice_profit=Sum(
+                F('items__total_price') - (
+                    F('items__product__purchase_price') * 
+                    F('items__quantity') * 
+                    ExpressionWrapper(
+                        Case(
+                            When(items__unit='CENT', then=Value(10)),
+                            default=Value(1),
+                            output_field=FloatField(),
+                        ),
+                        output_field=FloatField()
+                    )
+                ),
+                output_field=FloatField()
+            )
+        ).aggregate(total_profit=Sum('invoice_profit'))
+        
+        range_profit = range_profit_data['total_profit'] or 0
 
         # Cash/UPI from Payment records made in range
         payment_agg = Payment.objects.filter(
@@ -144,6 +182,7 @@ class DashboardSummaryView(APIView):
 
         return Response({
             'today_sales': float(range_sales),
+            'today_profit': float(range_profit),
             'today_cash': float(range_cash),
             'today_upi': float(range_upi),
             'today_bill_count': range_bill_count,
@@ -156,5 +195,8 @@ class DashboardSummaryView(APIView):
             'upi_label': upi_label,
             'bills_label': bills_label,
             'top_label': top_label,
+            'profit_label': profit_label,
         })
+
+
 
