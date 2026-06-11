@@ -270,18 +270,48 @@ class SalesAnalyticsView(APIView):
             revenue=Sum('grand_total')
         ).order_by('created_at__date')
         
-        payment_data = Payment.objects.filter(payment_date__date__gte=from_date).values('mode').annotate(
-            total=Sum('amount')
-        )
+        # Correctly calculate payment split including initial invoice payments
+        invoices = Invoice.objects.filter(created_at__date__gte=from_date).prefetch_related('payments')
+        
+        cash_total = 0
+        upi_total = 0
+        
+        # Calculate from Payment objects
+        payments = Payment.objects.filter(payment_date__date__gte=from_date)
+        for p in payments:
+            if p.mode == 'CASH':
+                cash_total += float(p.amount)
+            elif p.mode == 'UPI':
+                upi_total += float(p.amount)
+                
+        # Calculate initial payments (amount_paid - sum of payments for that invoice)
+        for inv in invoices:
+            total_payments = inv.payments.aggregate(Sum('amount'))['amount__sum'] or 0
+            initial_paid = float(inv.amount_paid) - float(total_payments)
+            if initial_paid > 0:
+                if inv.payment_method == 'UPI':
+                    upi_total += initial_paid
+                else:
+                    cash_total += initial_paid
+
+        payment_split = [
+            {'mode': 'CASH', 'total': cash_total},
+            {'mode': 'UPI', 'total': upi_total}
+        ]
         
         product_data = InvoiceItem.objects.filter(invoice__created_at__date__gte=from_date).values('product_name_snapshot').annotate(
             units_sold=Sum('quantity')
         ).order_by('-units_sold')[:20]
 
+        category_data = InvoiceItem.objects.filter(invoice__created_at__date__gte=from_date).values('product__category__name').annotate(
+            revenue=Sum('total_price')
+        ).order_by('-revenue')
+
         return Response({
             'sales_over_time': [{'date': str(s['created_at__date']), 'revenue': float(s['revenue'])} for s in sales_data],
-            'payment_split': [{'mode': p['mode'], 'total': float(p['total'])} for p in payment_data],
-            'product_performance': [{'name': p['product_name_snapshot'], 'units_sold': p['units_sold']} for p in product_data]
+            'payment_split': payment_split,
+            'product_performance': [{'name': p['product_name_snapshot'], 'units_sold': p['units_sold']} for p in product_data],
+            'category_performance': [{'category': c['product__category__name'] or 'Uncategorized', 'revenue': float(c['revenue'])} for c in category_data]
         })
 
 
@@ -294,22 +324,72 @@ class OperationsFinanceView(APIView):
         report_type = request.query_params.get('type', 'daily_snapshot')
 
         if report_type == 'daily_snapshot':
-            invoices = Invoice.objects.filter(created_at__date=today)
+            invoices = Invoice.objects.filter(created_at__date=today).prefetch_related('payments', 'items', 'items__product')
             total_sales = invoices.aggregate(Sum('grand_total'))['grand_total__sum'] or 0
             
-            payments = Payment.objects.filter(payment_date__date=today)
-            cash = payments.filter(mode='CASH').aggregate(Sum('amount'))['amount__sum'] or 0
-            upi = payments.filter(mode='UPI').aggregate(Sum('amount'))['amount__sum'] or 0
+            # Use the same robust calculation as DashboardSummaryView
+            cash_received = 0
+            upi_received = 0
+            
+            # From Payment objects today
+            payments_today = Payment.objects.filter(payment_date__date=today)
+            for p in payments_today:
+                if p.mode == 'CASH':
+                    cash_received += float(p.amount)
+                elif p.mode == 'UPI':
+                    upi_received += float(p.amount)
+            
+            # From initial payments of invoices created today
+            for inv in invoices:
+                # We only subtract payments that happened TODAY to get the "initial" part
+                # Actually, any payment recorded in the Payment table is already counted above.
+                # So we just need to add (inv.amount_paid - total_payments_ever_on_this_inv)
+                # No, that's not right. If an invoice was created today with 100 paid,
+                # and then a payment of 50 was recorded TODAY.
+                # amount_paid = 150. Payment table = 50.
+                # Today's received should be 150.
+                # 50 (from payment) + (150 - 50) (initial) = 150. Correct.
+                
+                total_payments_on_inv = inv.payments.aggregate(Sum('amount'))['amount__sum'] or 0
+                initial_paid = float(inv.amount_paid) - float(total_payments_on_inv)
+                if initial_paid > 0:
+                    if inv.payment_method == 'UPI':
+                        upi_received += initial_paid
+                    else:
+                        cash_received += initial_paid
             
             new_credit = 0
             for inv in invoices:
-                new_credit += inv.outstanding_balance
+                new_credit += float(inv.outstanding_balance)
+
+            # Calculate today's profit
+            profit_data = invoices.values('id').annotate(
+                invoice_profit=Sum(
+                    F('items__total_price') - (
+                        F('items__product__purchase_price') * 
+                        F('items__quantity') * 
+                        ExpressionWrapper(
+                            Case(
+                                When(items__unit='CENT', then=Value(10)),
+                                default=Value(1),
+                                output_field=FloatField(),
+                            ),
+                            output_field=FloatField()
+                        )
+                    ),
+                    output_field=FloatField()
+                )
+            ).aggregate(total_profit=Sum('invoice_profit'))
+            
+            total_profit = profit_data['total_profit'] or 0
 
             return Response({
                 'total_sales': float(total_sales),
-                'cash_received': float(cash),
-                'upi_received': float(upi),
-                'new_credit': float(new_credit)
+                'cash_received': float(cash_received),
+                'upi_received': float(upi_received),
+                'new_credit': float(new_credit),
+                'total_profit': float(total_profit),
+                'bill_count': invoices.count()
             })
 
         elif report_type == 'low_stock':
