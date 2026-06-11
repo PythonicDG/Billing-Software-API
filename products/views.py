@@ -4,6 +4,7 @@ from rest_framework.decorators import action
 from django.http import HttpResponse
 import csv
 import io
+from datetime import datetime
 from rest_framework.pagination import PageNumberPagination
 
 from .models import Product, Category
@@ -53,15 +54,32 @@ class ProductViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         """Optionally restricts the returned products based on stock status."""
+        from django.db.models import Sum, F
         queryset = Product.objects.all().order_by('-created_at')
         stock_filter = self.request.query_params.get('stock_filter')
         
         if stock_filter == 'low_stock':
-            from django.db.models import F
             # Low Stock: 0 < stock_quantity <= min_stock_level * 10
             queryset = queryset.filter(stock_quantity__lte=F('min_stock_level') * 10, stock_quantity__gt=0)
         elif stock_filter == 'out_of_stock':
             queryset = queryset.filter(stock_quantity__lte=0)
+        elif stock_filter == 'top_sellers':
+            from billing.models import InvoiceItem
+            from django.db.models import Sum, Case, When
+            # Get top 10 most sold product IDs
+            top_product_ids = InvoiceItem.objects.filter(
+                product__isnull=False,
+                product__is_active=True
+            ).values('product').annotate(
+                total_sold_qty=Sum('quantity')
+            ).order_by('-total_sold_qty').values_list('product', flat=True)[:10]
+            
+            if top_product_ids:
+                # Maintain order of sales
+                preserved_order = Case(*[When(id=pk, then=pos) for pos, pk in enumerate(top_product_ids)])
+                queryset = queryset.filter(id__in=top_product_ids).order_by(preserved_order)
+            else:
+                queryset = queryset.none()
             
         return queryset
 
@@ -133,7 +151,7 @@ class ProductViewSet(viewsets.ModelViewSet):
         from django.db.models import Sum
         
         # Get top product IDs from InvoiceItem
-        top_product_ids = InvoiceItem.objects.values('product').annotate(
+        top_product_ids = InvoiceItem.objects.filter(product__isnull=False).values('product').annotate(
             total_sold=Sum('quantity')
         ).order_by('-total_sold').values_list('product', flat=True)[:10]
         
@@ -152,20 +170,34 @@ class ProductViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['get'], url_path='export_csv')
     def export_csv(self, request):
         """Exports the filtered product list to a CSV file."""
+        from django.db.models import Sum
         queryset = self.filter_queryset(self.get_queryset())
         
+        stock_filter = request.query_params.get('stock_filter', 'all')
+        timestamp = datetime.now().strftime('%Y-%m-%d_%H%M%S')
+        filename = f"inventory_{stock_filter}_{timestamp}.csv"
+        
         response = HttpResponse(content_type='text/csv')
-        response['Content-Disposition'] = 'attachment; filename="inventory_export.csv"'
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
         
         writer = csv.writer(response)
-        writer.writerow([
+        
+        header = [
             'Name', 'Brand', 'Category', 'SKU', 'Purchase Price', 
             'Selling Price', 'MRP', 'No Of Case', 'Cent In Per Case', 
             'Total Stock (Cent)', 'Min Stock Level'
-        ])
+        ]
+        
+        is_top_sellers = stock_filter == 'top_sellers'
+        if is_top_sellers:
+            header.append('Total Sold Qty')
+            # Annotate queryset with total sold for CSV
+            queryset = queryset.annotate(total_sold_qty=Sum('invoiceitem__quantity'))
+
+        writer.writerow(header)
         
         for product in queryset:
-            writer.writerow([
+            row = [
                 product.name,
                 product.brand,
                 product.category.name if product.category else '',
@@ -177,7 +209,10 @@ class ProductViewSet(viewsets.ModelViewSet):
                 product.cent_in_per_cs,
                 product.total_stock_in_cent,
                 product.min_stock_level
-            ])
+            ]
+            if is_top_sellers:
+                row.append(getattr(product, 'total_sold_qty', 0))
+            writer.writerow(row)
             
         return response
 

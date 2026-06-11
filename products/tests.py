@@ -39,7 +39,7 @@ class ProductExportTest(TestCase):
         
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response['Content-Type'], 'text/csv')
-        self.assertTrue(response['Content-Disposition'].startswith('attachment; filename="inventory_export.csv"'))
+        self.assertIn('attachment; filename="inventory_all_', response['Content-Disposition'])
         
         content = response.content.decode('utf-8')
         lines = content.splitlines()
