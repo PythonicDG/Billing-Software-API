@@ -178,27 +178,27 @@
         <div style="float: right; width: 250px;">
             <div class="total-row">
                 <span class="total-label">Sub-Total:</span>
-                <span class="total-value">₹{{ invoice.sub_total }}</span>
+                <span class="total-value">Rs.{{ invoice.sub_total }}</span>
             </div>
             <div class="total-row">
                 <span class="total-label">Tax:</span>
-                <span class="total-value">₹{{ invoice.tax_amount }}</span>
+                <span class="total-value">Rs.{{ invoice.tax_amount }}</span>
             </div>
             <div class="total-row">
                 <span class="total-label">Discount:</span>
-                <span class="total-value">-₹{{ invoice.discount_amount }}</span>
+                <span class="total-value">-Rs.{{ invoice.discount_amount }}</span>
             </div>
             <div class="total-row grand-total">
                 <span class="total-label">Grand Total:</span>
-                <span class="total-value">₹{{ invoice.grand_total }}</span>
+                <span class="total-value">Rs.{{ invoice.grand_total }}</span>
             </div>
             <div class="total-row" style="margin-top: 5px; color: #666;">
                 <span class="total-label">Paid Amount:</span>
-                <span class="total-value">₹{{ invoice.paid_amount }}</span>
+                <span class="total-value">Rs.{{ invoice.paid_amount }}</span>
             </div>
             <div class="total-row" style="font-weight: bold; color: {% if invoice.due_amount > 0 %}#ed1c24{% else %}#3c763d{% endif %};">
                 <span class="total-label">Balance Due:</span>
-                <span class="total-value">₹{{ invoice.due_amount }}</span>
+                <span class="total-value">Rs.{{ invoice.due_amount }}</span>
             </div>
         </div>
         <div style="clear: both;"></div>

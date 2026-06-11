@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <style>
+        @page {
+            size: a4;
+            margin: 1cm;
+        }
+        body {
+            font-family: 'Helvetica', 'Arial', sans-serif;
+            font-size: 11px;
+            color: #333;
+            line-height: 1.4;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #2563EB;
+            padding-bottom: 10px;
+        }
+        .header h1 {
+            color: #2563EB;
+            margin: 0;
+            font-size: 24px;
+            text-transform: uppercase;
+        }
+        .header p {
+            margin: 5px 0 0;
+            font-size: 10px;
+            color: #666;
+        }
+        .info-section {
+            width: 100%;
+            margin-bottom: 25px;
+        }
+        .info-title {
+            font-weight: bold;
+            color: #2563EB;
+            border-bottom: 1px solid #ddd;
+            margin-bottom: 5px;
+            padding-bottom: 2px;
+            font-size: 12px;
+        }
+        .summary-table {
+            width: 100%;
+            margin-bottom: 20px;
+            background-color: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+        }
+        .summary-table td {
+            padding: 15px;
+            text-align: center;
+        }
+        .summary-label {
+            font-size: 10px;
+            color: #64748b;
+            text-transform: uppercase;
+            font-weight: bold;
+            display: block;
+        }
+        .summary-value {
+            font-size: 18px;
+            font-weight: bold;
+            color: #0f172a;
+            display: block;
+            margin-top: 5px;
+        }
+        .outstanding-value {
+            color: #ef4444;
+        }
+        .items-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+        }
+        .items-table th {
+            background-color: #2563EB;
+            color: white;
+            text-align: left;
+            padding: 8px;
+            font-size: 10px;
+            text-transform: uppercase;
+        }
+        .items-table td {
+            padding: 8px;
+            border-bottom: 1px solid #eee;
+        }
+        .items-table tr:nth-child(even) {
+            background-color: #fcfcfc;
+        }
+        .footer {
+            position: fixed;
+            bottom: 0px;
+            left: 0;
+            right: 0;
+            text-align: center;
+            border-top: 1px solid #ddd;
+            padding-top: 10px;
+            font-size: 9px;
+            color: #999;
+        }
+        .status-badge {
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 8px;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+        .status-paid { background: #dcfce7; color: #16a34a; }
+        .status-partial { background: #ffedd5; color: #f97316; }
+        .status-unpaid { background: #fee2e2; color: #ef4444; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Customer Account Statement</h1>
+        <p>Vighnaharta Fataka | Premium Firecrackers & Festival Supplies</p>
+    </div>
+
+    <div class="info-section">
+        <table style="width: 100%;">
+            <tr>
+                <td style="width: 60%; vertical-align: top;">
+                    <div class="info-title">Customer Details</div>
+                    <p>
+                        <strong>Name:</strong> {{ customer.name }}<br>
+                        <strong>Phone:</strong> {{ customer.phone }}<br>
+                        <strong>Address:</strong> {{ customer.address|default:"-" }}
+                    </p>
+                </td>
+                <td style="width: 40%; vertical-align: top; text-align: right;">
+                    <div class="info-title">Statement Info</div>
+                    <p>
+                        <strong>Date Generated:</strong> {{ now|date:"d M Y" }}<br>
+                        <strong>Time Generated:</strong> {{ now|date:"H:i" }}<br>
+                    </p>
+                </td>
+            </tr>
+        </table>
+    </div>
+
+    <table class="summary-table">
+        <tr>
+            <td>
+                <span class="summary-label">Total Billed</span>
+                <span class="summary-value">Rs.{{ total_billed|floatformat:2 }}</span>
+            </td>
+            <td>
+                <span class="summary-label">Total Paid</span>
+                <span class="summary-value" style="color: #16a34a;">Rs.{{ total_paid|floatformat:2 }}</span>
+            </td>
+            <td>
+                <span class="summary-label">Outstanding</span>
+                <span class="summary-value outstanding-value">Rs.{{ total_outstanding|floatformat:2 }}</span>
+            </td>
+        </tr>
+    </table>
+
+    <div class="info-title">Transaction History</div>
+    <table class="items-table">
+        <thead>
+            <tr>
+                <th>Date</th>
+                <th>Bill Number</th>
+                <th style="text-align: right;">Total Amount</th>
+                <th style="text-align: right;">Paid</th>
+                <th style="text-align: right;">Outstanding</th>
+                <th>Status</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for inv in invoices %}
+            <tr>
+                <td>{{ inv.created_at|date:"d M Y" }}</td>
+                <td><strong>{{ inv.invoice_number }}</strong></td>
+                <td style="text-align: right;">Rs.{{ inv.grand_total|floatformat:2 }}</td>
+                <td style="text-align: right; color: #16a34a;">Rs.{{ inv.amount_paid|floatformat:2 }}</td>
+                <td style="text-align: right; color: #ef4444;">Rs.{{ inv.due_amount|floatformat:2 }}</td>
+                <td>
+                    <span class="status-badge {% if inv.payment_status == 'PAID' %}status-paid{% elif inv.payment_status == 'PARTIAL' %}status-partial{% else %}status-unpaid{% endif %}">
+                        {{ inv.get_payment_status_display }}
+                    </span>
+                </td>
+            </tr>
+            {% empty %}
+            <tr>
+                <td colspan="6" style="text-align: center; padding: 20px; color: #64748b;">No transactions found.</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <div style="margin-top: 50px;">
+        <p style="font-size: 10px; color: #64748b; text-align: center;">
+            This is a computer-generated statement and does not require a signature.
+        </p>
+    </div>
+
+    <div class="footer">
+        Generated by Vighnaharta Billing System
+    </div>
+</body>
+</html>

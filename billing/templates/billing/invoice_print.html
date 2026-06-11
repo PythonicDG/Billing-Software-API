@@ -59,18 +59,18 @@
             <tr>
                 <td>{{ item.product_name_snapshot }}</td>
                 <td>{{ item.quantity }} {{ item.get_unit_display }}</td>
-                <td>₹{{ item.unit_price }}</td>
-                <td>₹{{ item.total_price }}</td>
+                <td>Rs.{{ item.unit_price }}</td>
+                <td>Rs.{{ item.total_price }}</td>
             </tr>
             {% endfor %}
         </tbody>
     </table>
 
     <div class="totals">
-        <div class="total-row"><span>Sub-Total:</span> <span>₹{{ invoice.sub_total }}</span></div>
-        <div class="total-row"><span>Tax:</span> <span>₹{{ invoice.tax_amount }}</span></div>
-        <div class="total-row"><span>Discount:</span> <span>-₹{{ invoice.discount_amount }}</span></div>
-        <div class="total-row grand-total"><span>Grand Total:</span> <span>₹{{ invoice.grand_total }}</span></div>
+        <div class="total-row"><span>Sub-Total:</span> <span>Rs.{{ invoice.sub_total }}</span></div>
+        <div class="total-row"><span>Tax:</span> <span>Rs.{{ invoice.tax_amount }}</span></div>
+        <div class="total-row"><span>Discount:</span> <span>-Rs.{{ invoice.discount_amount }}</span></div>
+        <div class="total-row grand-total"><span>Grand Total:</span> <span>Rs.{{ invoice.grand_total }}</span></div>
     </div>
 
     <script>
