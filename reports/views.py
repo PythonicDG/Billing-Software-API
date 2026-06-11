@@ -3,7 +3,11 @@ from rest_framework.response import Response
 from rest_framework import permissions, status
 from django.utils import timezone
 from django.db.models import Sum, F, Count, Q, ExpressionWrapper, FloatField, Case, When, Value
+from django.template.loader import render_to_string
+from django.http import HttpResponse
 from datetime import datetime, timedelta
+from xhtml2pdf import pisa
+import io
 
 from billing.models import Invoice, InvoiceItem, Payment
 from products.models import Product
@@ -199,4 +203,140 @@ class DashboardSummaryView(APIView):
         })
 
 
+class CustomerInsightsView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
 
+    def get(self, request):
+        insight_type = request.query_params.get('type', 'outstanding')
+        download = request.query_params.get('download', 'false') == 'true'
+
+        if insight_type == 'outstanding':
+            customers = Customer.objects.all()
+            data = []
+            for c in customers:
+                balance = c.outstanding_balance
+                if balance > 0:
+                    last_inv = c.invoices.order_by('-created_at').first()
+                    days_overdue = (timezone.now() - last_inv.created_at).days if last_inv else 0
+                    data.append({
+                        'name': c.name,
+                        'phone': c.phone,
+                        'outstanding': balance,
+                        'days_overdue': days_overdue
+                    })
+            
+            data = sorted(data, key=lambda x: x['outstanding'], reverse=True)
+
+            if download:
+                context = {'customers': data, 'now': timezone.now()}
+                html = render_to_string('reports/outstanding_list_pdf.html', context)
+                buffer = io.BytesIO()
+                pisa_status = pisa.CreatePDF(html, dest=buffer)
+                if pisa_status.err:
+                    return Response({'error': 'PDF generation failed'}, status=500)
+                pdf = buffer.getvalue()
+                buffer.close()
+                response = HttpResponse(pdf, content_type='application/pdf')
+                response['Content-Disposition'] = 'attachment; filename="outstanding_report.pdf"'
+                return response
+
+            return Response(data)
+
+        elif insight_type == 'top_customers':
+            customers = Customer.objects.annotate(
+                total_business=Sum('invoices__grand_total'),
+                visit_frequency=Count('invoices')
+            ).order_by('-total_business')[:20]
+            
+            data = [{
+                'name': c.name,
+                'phone': c.phone,
+                'total_business': float(c.total_business or 0),
+                'visit_frequency': c.visit_frequency
+            } for c in customers]
+            return Response(data)
+
+        return Response({"error": "Invalid type"}, status=400)
+
+
+class SalesAnalyticsView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        days = int(request.query_params.get('days', 30))
+        from_date = (timezone.now() - timedelta(days=days)).date()
+
+        sales_data = Invoice.objects.filter(created_at__date__gte=from_date).values('created_at__date').annotate(
+            revenue=Sum('grand_total')
+        ).order_by('created_at__date')
+        
+        payment_data = Payment.objects.filter(payment_date__date__gte=from_date).values('mode').annotate(
+            total=Sum('amount')
+        )
+        
+        product_data = InvoiceItem.objects.filter(invoice__created_at__date__gte=from_date).values('product_name_snapshot').annotate(
+            units_sold=Sum('quantity')
+        ).order_by('-units_sold')[:20]
+
+        return Response({
+            'sales_over_time': [{'date': str(s['created_at__date']), 'revenue': float(s['revenue'])} for s in sales_data],
+            'payment_split': [{'mode': p['mode'], 'total': float(p['total'])} for p in payment_data],
+            'product_performance': [{'name': p['product_name_snapshot'], 'units_sold': p['units_sold']} for p in product_data]
+        })
+
+
+class OperationsFinanceView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        today = timezone.localtime(timezone.now()).date()
+        download = request.query_params.get('download', 'false') == 'true'
+        report_type = request.query_params.get('type', 'daily_snapshot')
+
+        if report_type == 'daily_snapshot':
+            invoices = Invoice.objects.filter(created_at__date=today)
+            total_sales = invoices.aggregate(Sum('grand_total'))['grand_total__sum'] or 0
+            
+            payments = Payment.objects.filter(payment_date__date=today)
+            cash = payments.filter(mode='CASH').aggregate(Sum('amount'))['amount__sum'] or 0
+            upi = payments.filter(mode='UPI').aggregate(Sum('amount'))['amount__sum'] or 0
+            
+            new_credit = 0
+            for inv in invoices:
+                new_credit += inv.outstanding_balance
+
+            return Response({
+                'total_sales': float(total_sales),
+                'cash_received': float(cash),
+                'upi_received': float(upi),
+                'new_credit': float(new_credit)
+            })
+
+        elif report_type == 'low_stock':
+            all_products = Product.objects.filter(is_active=True)
+            low_stock_list = []
+            for p in all_products:
+                if p.total_stock_in_cent <= p.min_stock_level:
+                    low_stock_list.append({
+                        'name': p.name,
+                        'brand': p.brand,
+                        'stock': p.total_stock_in_cent,
+                        'min_level': p.min_stock_level
+                    })
+            
+            if download:
+                context = {'products': low_stock_list, 'now': timezone.now()}
+                html = render_to_string('reports/low_stock_pdf.html', context)
+                buffer = io.BytesIO()
+                pisa_status = pisa.CreatePDF(html, dest=buffer)
+                if pisa_status.err:
+                    return Response({'error': 'PDF generation failed'}, status=500)
+                pdf = buffer.getvalue()
+                buffer.close()
+                response = HttpResponse(pdf, content_type='application/pdf')
+                response['Content-Disposition'] = 'attachment; filename="low_stock_report.pdf"'
+                return response
+            
+            return Response(low_stock_list)
+            
+        return Response({"error": "Invalid type"}, status=400)

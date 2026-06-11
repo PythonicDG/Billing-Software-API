@@ -45,7 +45,24 @@ class Invoice(models.Model):
             # Simple unique invoice number generation: INV-20231027-001
             local_now = timezone.localtime(timezone.now())
             today = local_now.strftime('%Y%m%d')
-            count = Invoice.objects.filter(created_at__date=local_now.date()).count() + 1
+            
+            # Find the highest existing number for today to get the next count
+            # This is more robust than count() as it handles deletions correctly.
+            last_invoice = Invoice.objects.filter(
+                invoice_number__startswith=f"INV-{today}-"
+            ).order_by('-invoice_number').first()
+            
+            if last_invoice:
+                try:
+                    # Extract the last 4 digits
+                    last_count = int(last_invoice.invoice_number.split('-')[-1])
+                    count = last_count + 1
+                except (IndexError, ValueError):
+                    # Fallback to count if the format is not as expected
+                    count = Invoice.objects.filter(created_at__date=local_now.date()).count() + 1
+            else:
+                count = 1
+                
             self.invoice_number = f"INV-{today}-{count:04d}"
         
         # Calculate payment status

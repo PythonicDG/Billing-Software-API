@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from django.db import transaction
+from django.db import transaction, IntegrityError
 from django.db.models import F
 from products.models import Product
 from customers.models import Customer
@@ -62,8 +62,17 @@ class InvoiceSerializer(serializers.ModelSerializer):
                         f"Insufficient stock for product '{product.name}'. Available: {product.stock_quantity}, Requested: {effective_quantity} pieces"
                     )
 
-            # 2. Create the Invoice
-            invoice = Invoice.objects.create(**validated_data)
+            # 2. Create the Invoice with retry logic for invoice_number collisions
+            invoice = None
+            for attempt in range(5):
+                try:
+                    with transaction.atomic(savepoint=True):
+                        invoice = Invoice.objects.create(**validated_data)
+                        break
+                except IntegrityError as e:
+                    if 'invoice_number' in str(e) and attempt < 4:
+                        continue
+                    raise e
 
             # 3. Create items and update stock
             for item_data in items_data:
