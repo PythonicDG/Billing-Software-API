@@ -43,8 +43,9 @@ class Invoice(models.Model):
     def save(self, *args, **kwargs):
         if not self.invoice_number:
             # Simple unique invoice number generation: INV-20231027-001
-            today = timezone.now().strftime('%Y%m%d')
-            count = Invoice.objects.filter(created_at__date=timezone.now().date()).count() + 1
+            local_now = timezone.localtime(timezone.now())
+            today = local_now.strftime('%Y%m%d')
+            count = Invoice.objects.filter(created_at__date=local_now.date()).count() + 1
             self.invoice_number = f"INV-{today}-{count:04d}"
         
         # Calculate payment status

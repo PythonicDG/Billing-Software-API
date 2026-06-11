@@ -20,7 +20,7 @@ class DashboardSummaryView(APIView):
 
     def get(self, request):
         range_val = request.query_params.get('range', 'today').lower()
-        now = timezone.now()
+        now = timezone.localtime(timezone.now())
         
         # Default labels
         sales_label = "SALES"
