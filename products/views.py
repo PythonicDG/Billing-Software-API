@@ -149,6 +149,38 @@ class ProductViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(product_list, many=True)
         return Response(serializer.data)
 
+    @action(detail=False, methods=['get'], url_path='export_csv')
+    def export_csv(self, request):
+        """Exports the filtered product list to a CSV file."""
+        queryset = self.filter_queryset(self.get_queryset())
+        
+        response = HttpResponse(content_type='text/csv')
+        response['Content-Disposition'] = 'attachment; filename="inventory_export.csv"'
+        
+        writer = csv.writer(response)
+        writer.writerow([
+            'Name', 'Brand', 'Category', 'SKU', 'Purchase Price', 
+            'Selling Price', 'MRP', 'No Of Case', 'Cent In Per Case', 
+            'Total Stock (Cent)', 'Min Stock Level'
+        ])
+        
+        for product in queryset:
+            writer.writerow([
+                product.name,
+                product.brand,
+                product.category.name if product.category else '',
+                product.sku or '',
+                product.purchase_price,
+                product.selling_price,
+                product.mrp or '',
+                product.no_of_case,
+                product.cent_in_per_cs,
+                product.total_stock_in_cent,
+                product.min_stock_level
+            ])
+            
+        return response
+
     @action(detail=False, methods=['post'], url_path='bulk_upload')
     def bulk_upload(self, request):
         """Parses an uploaded CSV file and performs bulk creation/updating of products."""
