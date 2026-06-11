@@ -1,7 +1,8 @@
-from rest_framework import viewsets, permissions, status
+from rest_framework import viewsets, permissions, status, filters
 from rest_framework.response import Response
 from rest_framework.decorators import action
 from rest_framework.authentication import TokenAuthentication
+from rest_framework.pagination import PageNumberPagination
 from core.authentication import QueryParameterTokenAuthentication
 from django.db import transaction
 from django.http import HttpResponse
@@ -12,6 +13,11 @@ from django.db.models import F
 
 # Import for PDF generation
 import io
+
+class GlobalLedgerPagination(PageNumberPagination):
+    page_size = 20
+    page_size_query_param = 'page_size'
+    max_page_size = 100
 
 class InvoiceViewSet(viewsets.ModelViewSet):
     queryset = Invoice.objects.all().order_by('-created_at')
@@ -24,6 +30,54 @@ class InvoiceViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
+
+    @action(detail=False, methods=['GET'])
+    def all_transactions(self, request):
+        invoices = Invoice.objects.all().order_by('-created_at')
+        
+        paginator = GlobalLedgerPagination()
+        page = paginator.paginate_queryset(invoices, request)
+        
+        invoices_to_process = page if page is not None else invoices
+        
+        bills_data = []
+        for inv in invoices_to_process:
+            outstanding = inv.outstanding_balance
+            payments_data = []
+            for p in inv.payments.all():
+                payments_data.append({
+                    'amount': float(p.amount),
+                    'mode': p.mode,
+                    'payment_date': p.payment_date.isoformat(),
+                    'notes': p.notes or ''
+                })
+
+            bills_data.append({
+                'id': str(inv.id),
+                'customer_name': inv.customer.name if inv.customer else 'Guest',
+                'customer_phone': inv.customer.phone if inv.customer else '',
+                'invoice_number': inv.invoice_number,
+                'date': inv.created_at.isoformat(),
+                'total': float(inv.total_amount),
+                'paid': float(inv.amount_paid),
+                'outstanding': float(outstanding),
+                'payment_method': inv.payment_method,
+                'payments': payments_data
+            })
+            
+        response_data = {
+            'bills': bills_data,
+        }
+        
+        if page is not None:
+            return Response({
+                'count': paginator.page.paginator.count,
+                'next': paginator.get_next_link(),
+                'previous': paginator.get_previous_link(),
+                'bills': bills_data,
+            })
+
+        return Response(response_data)
 
     @action(detail=False, methods=['POST'], permission_classes=[permissions.IsAuthenticated])
     def preview(self, request):
