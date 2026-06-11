@@ -42,7 +42,6 @@ class ProductViewSet(viewsets.ModelViewSet):
     ViewSet for managing inventory (Owner can CUD, Staff can Read).
     Features: Pagination, Search by name/brand/category, Sorting.
     """
-    queryset = Product.objects.all().order_by('-created_at')
     serializer_class = ProductSerializer
     permission_classes = [IsOwnerOrReadOnly]
     pagination_class = StandardResultsSetPagination
@@ -51,6 +50,20 @@ class ProductViewSet(viewsets.ModelViewSet):
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
     search_fields = ['name', 'brand', 'sku', 'category__name']
     ordering_fields = ['selling_price', 'stock_quantity', 'created_at']
+
+    def get_queryset(self):
+        """Optionally restricts the returned products based on stock status."""
+        queryset = Product.objects.all().order_by('-created_at')
+        stock_filter = self.request.query_params.get('stock_filter')
+        
+        if stock_filter == 'low_stock':
+            from django.db.models import F
+            # Low Stock: 0 < stock_quantity <= min_stock_level * 10
+            queryset = queryset.filter(stock_quantity__lte=F('min_stock_level') * 10, stock_quantity__gt=0)
+        elif stock_filter == 'out_of_stock':
+            queryset = queryset.filter(stock_quantity__lte=0)
+            
+        return queryset
 
     def create(self, request, *args, **kwargs):
         """Custom create to include success key."""
