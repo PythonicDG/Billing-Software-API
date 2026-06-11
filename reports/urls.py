@@ -1,9 +1,9 @@
-from django.urls import path
+from django.urls import path, re_path
 from .views import DashboardSummaryView, CustomerInsightsView, SalesAnalyticsView, OperationsFinanceView
 
 urlpatterns = [
-    path('summary/', DashboardSummaryView.as_view(), name='dashboard-summary'),
-    path('customers/', CustomerInsightsView.as_view(), name='report-customers'),
-    path('analytics/', SalesAnalyticsView.as_view(), name='report-analytics'),
-    path('operations/', OperationsFinanceView.as_view(), name='report-operations'),
+    re_path(r'^summary/?$', DashboardSummaryView.as_view(), name='dashboard-summary'),
+    re_path(r'^customers/?$', CustomerInsightsView.as_view(), name='report-customers'),
+    re_path(r'^analytics/?$', SalesAnalyticsView.as_view(), name='report-analytics'),
+    re_path(r'^operations/?$', OperationsFinanceView.as_view(), name='report-operations'),
 ]
