@@ -70,6 +70,32 @@ class ProductViewSet(viewsets.ModelViewSet):
             'data': response.data
         }, status=status.HTTP_200_OK)
 
+    @action(detail=False, methods=['get'], url_path='health_analytics')
+    def health_analytics(self, request):
+        """Returns inventory health analytics."""
+        from django.db.models import Sum, F, DecimalField, Count, Q
+        
+        products = Product.objects.filter(is_active=True)
+        
+        stats = products.aggregate(
+            total_value=Sum(F('stock_quantity') * F('purchase_price'), output_field=DecimalField()),
+            potential_revenue=Sum(F('stock_quantity') * F('selling_price'), output_field=DecimalField()),
+            # Low Stock: total_stock_in_cent <= min_stock_level
+            # total_stock_in_cent = stock_quantity / 10.0
+            low_stock_count=Count('id', filter=Q(stock_quantity__lte=F('min_stock_level') * 10) & Q(stock_quantity__gt=0)),
+            out_of_stock_count=Count('id', filter=Q(stock_quantity__lte=0))
+        )
+        
+        return Response({
+            'success': True,
+            'data': {
+                'total_inventory_value': float(stats['total_value'] or 0.0),
+                'potential_revenue': float(stats['potential_revenue'] or 0.0),
+                'low_stock_items': stats['low_stock_count'] or 0,
+                'out_of_stock_items': stats['out_of_stock_count'] or 0,
+            }
+        })
+
     @action(detail=False, methods=['get'], url_path='download_template')
     def download_template(self, request):
         """Generates and returns a CSV template for bulk product upload."""
