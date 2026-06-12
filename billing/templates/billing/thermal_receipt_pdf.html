@@ -161,10 +161,10 @@ body{
 <tr>
 <td>
 <div class="item-name">{{ item.product_name_snapshot|upper }}</div>
-<div class="item-sub">₹{{ item.unit_price }}/{{ item.get_unit_display|lower }}</div>
+<div class="item-sub">Rs.{{ item.unit_price }}/{{ item.get_unit_display|lower }}</div>
 </td>
 <td style="text-align:center;">{{ item.quantity }}</td>
-<td style="text-align:right;">₹{{ item.total_price }}</td>
+<td style="text-align:right;">Rs.{{ item.total_price }}</td>
 </tr>
 {% endfor %}
 </tbody>
@@ -175,37 +175,37 @@ body{
 <table class="totals">
 <tr>
 <td>Sub Total</td>
-<td class="right">₹{{ invoice.sub_total }}</td>
+<td class="right">Rs.{{ invoice.sub_total }}</td>
 </tr>
 
 {% if invoice.tax_amount > 0 %}
 <tr>
 <td>GST</td>
-<td class="right">₹{{ invoice.tax_amount }}</td>
+<td class="right">Rs.{{ invoice.tax_amount }}</td>
 </tr>
 {% endif %}
 
 {% if invoice.discount_amount > 0 %}
 <tr>
 <td>Discount</td>
-<td class="right">-₹{{ invoice.discount_amount }}</td>
+<td class="right">-Rs.{{ invoice.discount_amount }}</td>
 </tr>
 {% endif %}
 
 <tr class="grand-total">
 <td>TOTAL</td>
-<td class="right">₹{{ invoice.grand_total }}</td>
+<td class="right">Rs.{{ invoice.grand_total }}</td>
 </tr>
 
 <tr>
 <td>Paid</td>
-<td class="right">₹{{ invoice.amount_paid }}</td>
+<td class="right">Rs.{{ invoice.amount_paid }}</td>
 </tr>
 
 {% if invoice.due_amount > 0 %}
 <tr>
 <td><b>Balance Due</b></td>
-<td class="right"><b>₹{{ invoice.due_amount }}</b></td>
+<td class="right"><b>Rs.{{ invoice.due_amount }}</b></td>
 </tr>
 {% endif %}
 </table>
