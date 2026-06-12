@@ -1,349 +1,224 @@
 <!DOCTYPE html>
 <html>
-
 <head>
-    <meta charset="UTF-8">
-    <style>
-        @page {
-            size: 80mm 280mm; /* Fixed height to conform to standard PDF parser constraints */
-            margin: 5mm 3mm 8mm 3mm;
-        }
+<meta charset="UTF-8">
+<style>
+@page {
+    size: 80mm auto;
+    margin: 4mm;
+}
 
-        * {
-            box-sizing: border-box;
-        }
+body{
+    font-family: Arial, sans-serif;
+    width:72mm;
+    margin:0;
+    color:#000;
+    font-size:9pt;
+}
 
-        body {
-            font-family: 'Courier New', Courier, monospace;
-            font-size: 9pt;
-            width: 74mm;
-            line-height: 1.35;
-            margin: 0;
-            padding: 0;
-            color: #000;
-            background: #fff;
-        }
+.center{text-align:center;}
+.right{text-align:right;}
+.bold{font-weight:700;}
 
-        /* ─── Utility ─────────────────────────────── */
-        .center {
-            text-align: center;
-        }
+.header{
+    text-align:center;
+    margin-bottom:6px;
+}
 
-        .right {
-            text-align: right;
-        }
+.store-name{
+    font-size:16pt;
+    font-weight:800;
+    letter-spacing:1px;
+}
 
-        .bold {
-            font-weight: bold;
-        }
+.tagline{
+    font-size:8pt;
+    margin-top:2px;
+}
 
-        .small {
-            font-size: 7.5pt;
-        }
+.invoice-title{
+    margin-top:6px;
+    font-size:10pt;
+    font-weight:700;
+}
 
-        .italic {
-            font-style: italic;
-        }
+.line{
+    border-top:1px solid #000;
+    margin:5px 0;
+}
 
-        .divider {
-            border: none;
-            border-top: 1px dashed #000;
-            margin: 5px 0;
-        }
+.meta{
+    width:100%;
+    border-collapse:collapse;
+}
 
-        /* ─── Store Header ────────────────────────── */
-        .store-name {
-            font-size: 17pt;
-            font-weight: bold;
-            letter-spacing: 2px;
-            margin: 0 0 1px 0;
-        }
+.meta td{
+    padding:2px 0;
+    font-size:8.5pt;
+}
 
-        .store-tagline {
-            font-size: 8.5pt;
-            font-weight: bold;
-            letter-spacing: 0.5px;
-            margin: 0 0 3px 0;
-        }
+.items{
+    width:100%;
+    border-collapse:collapse;
+}
 
-        .store-info {
-            font-size: 8pt;
-            margin: 1px 0;
-        }
+.items th{
+    text-align:left;
+    padding:4px 0;
+    border-bottom:1px solid #000;
+    font-size:8pt;
+}
 
-        .doc-title {
-            font-size: 11pt;
-            font-weight: bold;
-            letter-spacing: 1px;
-            margin: 6px 0 4px 0;
-            border-top: 1px solid #000;
-            border-bottom: 1px solid #000;
-            padding: 3px 0;
-        }
+.items td{
+    padding:4px 0;
+    vertical-align:top;
+}
 
-        /* ─── Meta Info ───────────────────────────── */
-        .meta-table {
-            width: 100%;
-            border-collapse: collapse;
-            margin: 2px 0;
-        }
+.item-name{
+    font-weight:600;
+}
 
-        .meta-table td {
-            font-size: 8.5pt;
-            padding: 1.5px 0;
-            vertical-align: top;
-        }
+.item-sub{
+    font-size:7pt;
+}
 
-        .meta-label {
-            font-weight: bold;
-            white-space: nowrap;
-            padding-right: 4px;
-        }
+.totals{
+    width:100%;
+    border-collapse:collapse;
+    margin-top:4px;
+}
 
-        /* ─── Items Table ─────────────────────────── */
-        .items-table {
-            width: 100%;
-            border-collapse: collapse;
-            margin: 2px 0;
-        }
+.totals td{
+    padding:2px 0;
+}
 
-        .items-table thead tr th {
-            font-size: 8pt;
-            font-weight: bold;
-            padding: 3px 2px;
-            border-top: 1px dashed #000;
-            border-bottom: 1px dashed #000;
-            text-transform: uppercase;
-        }
+.grand-total{
+    border-top:1px solid #000;
+    border-bottom:1px solid #000;
+    font-size:11pt;
+    font-weight:700;
+}
 
-        .items-table tbody tr td {
-            font-size: 8.5pt;
-            padding: 4px 2px 3px 2px;
-            vertical-align: top;
-            border-bottom: 1px dotted #aaa;
-        }
+.footer{
+    text-align:center;
+    margin-top:8px;
+    font-size:8pt;
+}
 
-        .items-table tbody tr:last-child td {
-            border-bottom: none;
-        }
+.status{
+    font-weight:700;
+    margin:4px 0;
+}
 
-        .item-name {
-            font-weight: bold;
-            font-size: 8.5pt;
-        }
-
-        .item-rate {
-            font-size: 7.5pt;
-            color: #333;
-        }
-
-        .item-unit {
-            font-size: 7.5pt;
-            color: #444;
-        }
-
-        /* ─── Totals Block ────────────────────────── */
-        .totals-table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 4px;
-        }
-
-        .totals-table td {
-            font-size: 9pt;
-            padding: 2px 2px;
-        }
-
-        .totals-label {
-            text-align: right;
-            padding-right: 6px;
-            width: 65%;
-        }
-
-        .totals-value {
-            text-align: right;
-            width: 35%;
-        }
-
-        .grand-total-row td {
-            font-size: 11.5pt;
-            font-weight: bold;
-            padding: 0px 2px; /* Padding is handled by the inner div margin */
-            border-top: 1px solid #000;
-            border-bottom: 1px solid #000;
-        }
-
-        .due-row td {
-            font-size: 9.5pt;
-            font-weight: bold;
-            padding-top: 3px;
-        }
-
-        /* ─── Footer ──────────────────────────────── */
-        .footer {
-            font-size: 8pt;
-            margin-top: 8px;
-            line-height: 1.5;
-        }
-
-        .footer-status {
-            font-size: 9pt;
-            font-weight: bold;
-            margin: 3px 0;
-            padding: 2px 0;
-            border-top: 1px dashed #000;
-            border-bottom: 1px dashed #000;
-        }
-
-        .footer-thanks {
-            font-size: 10pt;
-            font-weight: bold;
-            margin: 8px 0 2px 0;
-        }
-
-        .footer-wish {
-            font-size: 8pt;
-            font-style: italic;
-            margin: 1px 0;
-        }
-    </style>
+.note{
+    font-size:7pt;
+    margin-top:6px;
+}
+</style>
 </head>
-
 <body>
 
-    <!-- ══ STORE HEADER ══════════════════════════════ -->
-    <div class="center">
-        <p class="store-name">VIGHNAHARTA</p>
-        <p class="store-tagline">FIRECRACKERS &amp; FESTIVALS</p>
-        <p class="store-info">Premium Wholesale Fireworks Depot</p>
-        <p class="store-info">Ph: +91 99999 88888</p>
-        <p class="doc-title">TAX INVOICE</p>
-    </div>
+<div class="header">
+    <div class="store-name">VIGHNAHARTA</div>
+    <div class="tagline">FIRECRACKERS & FESTIVALS</div>
+    <div>Premium Wholesale Fireworks Depot</div>
+    <div>+91 99999 88888</div>
+    <div class="line"></div>
+    <div class="invoice-title">TAX INVOICE</div>
+</div>
 
-    <!-- ══ INVOICE META ══════════════════════════════ -->
-    <table class="meta-table">
-        <tr>
-            <td style="width: 50%;">
-                <span class="meta-label">INV NO:</span>{{ invoice.invoice_number }}
-            </td>
-            <td style="width: 50%; text-align: right;">
-                <span class="meta-label">DATE:</span>{{ invoice.created_at|date:"d/m/Y" }}
-            </td>
-        </tr>
-        <tr>
-            <td colspan="2" style="text-align: right;">
-                <span class="meta-label">TIME:</span>{{ invoice.created_at|date:"H:i" }}
-            </td>
-        </tr>
-    </table>
+<table class="meta">
+<tr>
+<td><b>Invoice:</b> {{ invoice.invoice_number }}</td>
+<td class="right"><b>Date:</b> {{ invoice.created_at|date:"d/m/Y" }}</td>
+</tr>
+<tr>
+<td><b>Customer:</b> {{ invoice.customer.name|default:"CASH / WALK-IN"|upper }}</td>
+<td class="right"><b>Time:</b> {{ invoice.created_at|date:"H:i" }}</td>
+</tr>
+{% if invoice.customer.phone %}
+<tr>
+<td colspan="2"><b>Phone:</b> +91 {{ invoice.customer.phone }}</td>
+</tr>
+{% endif %}
+<tr>
+<td colspan="2"><b>Payment:</b> {{ invoice.payment_method|upper }}</td>
+</tr>
+</table>
 
-    <hr class="divider">
+<div class="line"></div>
 
-    <table class="meta-table">
-        <tr>
-            <td>
-                <span class="meta-label">CUSTOMER:</span>
-                {{ invoice.customer.name|default:"CASH / WALK-IN"|upper }}
-            </td>
-        </tr>
-        {% if invoice.customer.phone %}
-        <tr>
-            <td>
-                <span class="meta-label">PHONE:</span>+91 {{ invoice.customer.phone }}
-            </td>
-        </tr>
-        {% endif %}
-        <tr>
-            <td>
-                <span class="meta-label">PAYMENT:</span>{{ invoice.payment_method|upper }}
-            </td>
-        </tr>
-    </table>
+<table class="items">
+<thead>
+<tr>
+<th style="width:55%">Item</th>
+<th style="width:15%;text-align:center;">Qty</th>
+<th style="width:30%;text-align:right;">Amount</th>
+</tr>
+</thead>
+<tbody>
+{% for item in invoice.items.all %}
+<tr>
+<td>
+<div class="item-name">{{ item.product_name_snapshot|upper }}</div>
+<div class="item-sub">₹{{ item.unit_price }}/{{ item.get_unit_display|lower }}</div>
+</td>
+<td style="text-align:center;">{{ item.quantity }}</td>
+<td style="text-align:right;">₹{{ item.total_price }}</td>
+</tr>
+{% endfor %}
+</tbody>
+</table>
 
-    <hr class="divider">
+<div class="line"></div>
 
-    <!-- ══ ITEMS ═════════════════════════════════════ -->
-    <table class="items-table">
-        <thead>
-            <tr>
-                <th style="text-align: left; width: 52%;">DESCRIPTION</th>
-                <th style="text-align: center; width: 18%;">QTY</th>
-                <th style="text-align: right; width: 30%;">AMOUNT</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for item in invoice.items.all %}
-            <tr>
-                <td>
-                    <div class="item-name">{{ forloop.counter }}. {{ item.product_name_snapshot|upper }}</div>
-                    <div class="item-rate">@ Rs.{{ item.unit_price }}/{{ item.get_unit_display|lower }}</div>
-                </td>
-                <td style="text-align: center;">
-                    <div class="bold">{{ item.quantity }}</div>
-                    <div class="item-unit">{{ item.get_unit_display|lower }}</div>
-                </td>
-                <td style="text-align: right;">
-                    <div class="bold">Rs.{{ item.total_price }}</div>
-                </td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
+<table class="totals">
+<tr>
+<td>Sub Total</td>
+<td class="right">₹{{ invoice.sub_total }}</td>
+</tr>
 
-    <hr class="divider">
+{% if invoice.tax_amount > 0 %}
+<tr>
+<td>GST</td>
+<td class="right">₹{{ invoice.tax_amount }}</td>
+</tr>
+{% endif %}
 
-    <!-- ══ TOTALS ════════════════════════════════════ -->
-    <table class="totals-table">
-        <tr>
-            <td class="totals-label">SUB-TOTAL</td>
-            <td class="totals-value bold">Rs.{{ invoice.sub_total }}</td>
-        </tr>
-        {% if invoice.tax_amount > 0 %}
-        <tr>
-            <td class="totals-label">TAX / GST</td>
-            <td class="totals-value">Rs.{{ invoice.tax_amount }}</td>
-        </tr>
-        {% endif %}
-        {% if invoice.discount_amount > 0 %}
-        <tr>
-            <td class="totals-label">DISCOUNT</td>
-            <td class="totals-value">- Rs.{{ invoice.discount_amount }}</td>
-        </tr>
-        {% endif %}
+{% if invoice.discount_amount > 0 %}
+<tr>
+<td>Discount</td>
+<td class="right">-₹{{ invoice.discount_amount }}</td>
+</tr>
+{% endif %}
 
-        <tr class="grand-total-row">
-            <td class="totals-label" style="text-align: right; padding-right: 6px;">
-                <div style="margin-top: 6px; margin-bottom: 6px;">GRAND TOTAL</div>
-            </td>
-            <td class="totals-value">
-                <div style="margin-top: 6px; margin-bottom: 6px;">Rs.{{ invoice.grand_total }}</div>
-            </td>
-        </tr>
+<tr class="grand-total">
+<td>TOTAL</td>
+<td class="right">₹{{ invoice.grand_total }}</td>
+</tr>
 
-        <tr>
-            <td class="totals-label" style="padding-top: 5px;">AMOUNT PAID</td>
-            <td class="totals-value bold" style="padding-top: 5px;">Rs.{{ invoice.amount_paid }}</td>
-        </tr>
+<tr>
+<td>Paid</td>
+<td class="right">₹{{ invoice.amount_paid }}</td>
+</tr>
 
-        {% if invoice.due_amount > 0 %}
-        <tr class="due-row">
-            <td class="totals-label">OUTSTANDING DUE</td>
-            <td class="totals-value">Rs.{{ invoice.due_amount }}</td>
-        </tr>
-        {% endif %}
-    </table>
+{% if invoice.due_amount > 0 %}
+<tr>
+<td><b>Balance Due</b></td>
+<td class="right"><b>₹{{ invoice.due_amount }}</b></td>
+</tr>
+{% endif %}
+</table>
 
-    <hr class="divider">
+<div class="line"></div>
 
-    <!-- ══ FOOTER ════════════════════════════════════ -->
-    <div class="center footer">
-        <p style="margin: 0;">TOTAL ITEMS: {{ invoice.items.count }}</p>
-        <p class="footer-status">STATUS: {{ invoice.payment_status|upper }}</p>
-        <p class="footer-thanks">★ THANK YOU ★</p>
-        <p class="footer-wish">Wishing You A Safe &amp; Happy Celebration!</p>
-        <p class="small" style="margin-top: 6px;">*Goods once sold will not be taken back*</p>
-    </div>
+<div class="footer">
+<div>Total Items: {{ invoice.items.count }}</div>
+<div class="status">{{ invoice.payment_status|upper }}</div>
+<div><b>Thank You For Your Purchase</b></div>
+<div>Visit Again</div>
+<div class="note">Goods once sold will not be taken back.</div>
+</div>
 
 </body>
-
 </html>
