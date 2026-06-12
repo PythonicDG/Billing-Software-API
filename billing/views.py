@@ -134,20 +134,27 @@ class InvoiceViewSet(viewsets.ModelViewSet):
         buffer = io.BytesIO()
 
         def link_callback(uri, rel):
+            # Handle both absolute URLs and relative paths
             if uri.startswith(settings.MEDIA_URL):
-                path = os.path.join(settings.MEDIA_ROOT, uri.replace(settings.MEDIA_URL, ""))
+                path = os.path.join(settings.MEDIA_ROOT, uri.replace(settings.MEDIA_URL, "", 1))
+            elif settings.MEDIA_URL in uri:
+                path = os.path.join(settings.MEDIA_ROOT, uri.split(settings.MEDIA_URL)[-1])
             elif uri.startswith(settings.STATIC_URL):
-                path = os.path.join(settings.STATIC_ROOT, uri.replace(settings.STATIC_URL, ""))
+                path = os.path.join(settings.STATIC_ROOT, uri.replace(settings.STATIC_URL, "", 1))
+            elif settings.STATIC_URL in uri:
+                path = os.path.join(settings.STATIC_ROOT, uri.split(settings.STATIC_URL)[-1])
             else:
                 return uri
-            return path
+            
+            # Ensure path is a string and return it
+            return str(path)
 
         # Create the PDF object
         pisa_status = pisa.CreatePDF(html, dest=buffer, link_callback=link_callback)
         
         # Check for errors
         if pisa_status.err:
-            return Response({'error': 'PDF generation failed'}, status=status.HTTP_500_INTERNAL_SERVER_VALUE)
+            return Response({'error': 'PDF generation failed'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         # Get the value of the BytesIO buffer and write it to the response.
         pdf = buffer.getvalue()
@@ -201,13 +208,20 @@ class InvoiceViewSet(viewsets.ModelViewSet):
         buffer = io.BytesIO()
 
         def link_callback(uri, rel):
+            # Handle both absolute URLs and relative paths
             if uri.startswith(settings.MEDIA_URL):
-                path = os.path.join(settings.MEDIA_ROOT, uri.replace(settings.MEDIA_URL, ""))
+                path = os.path.join(settings.MEDIA_ROOT, uri.replace(settings.MEDIA_URL, "", 1))
+            elif settings.MEDIA_URL in uri:
+                path = os.path.join(settings.MEDIA_ROOT, uri.split(settings.MEDIA_URL)[-1])
             elif uri.startswith(settings.STATIC_URL):
-                path = os.path.join(settings.STATIC_ROOT, uri.replace(settings.STATIC_URL, ""))
+                path = os.path.join(settings.STATIC_ROOT, uri.replace(settings.STATIC_URL, "", 1))
+            elif settings.STATIC_URL in uri:
+                path = os.path.join(settings.STATIC_ROOT, uri.split(settings.STATIC_URL)[-1])
             else:
                 return uri
-            return path
+            
+            # Ensure path is a string and return it
+            return str(path)
 
         pisa_status = pisa.CreatePDF(html, dest=buffer, link_callback=link_callback)
         
