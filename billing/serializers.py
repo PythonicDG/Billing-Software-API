@@ -17,6 +17,13 @@ class InvoiceItemSerializer(serializers.ModelSerializer):
         fields = ['id', 'product', 'unit', 'quantity', 'unit_price', 'total_price', 'product_name_snapshot', 'sku_snapshot']
         read_only_fields = ['total_price', 'product_name_snapshot', 'sku_snapshot']
 
+    def to_representation(self, instance):
+        representation = super().to_representation(instance)
+        if instance.product:
+            from products.serializers import ProductSerializer
+            representation['product'] = ProductSerializer(instance.product).data
+        return representation
+
 class InvoiceSerializer(serializers.ModelSerializer):
     items = InvoiceItemSerializer(many=True)
     customer_phone = serializers.CharField(write_only=True, required=False)
