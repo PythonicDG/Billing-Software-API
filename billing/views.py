@@ -11,8 +11,12 @@ from .serializers import InvoiceSerializer, InvoiceItemSerializer, PaymentSerial
 from products.models import Product
 from accounts.permissions import IsOwner
 from django.db.models import F
+import io
 
-# ... rest of imports
+class GlobalLedgerPagination(PageNumberPagination):
+    page_size = 20
+    page_size_query_param = 'page_size'
+    max_page_size = 100
 
 class InvoiceViewSet(viewsets.ModelViewSet):
     queryset = Invoice.objects.all().order_by('-created_at')
