@@ -1,4 +1,5 @@
 import uuid
+from decimal import Decimal
 from django.db import models
 from django.conf import settings
 from products.models import Product
@@ -25,13 +26,13 @@ class Invoice(models.Model):
     customer = models.ForeignKey(Customer, on_delete=models.SET_NULL, null=True, blank=True, related_name='invoices')
     
     # Pricing Summary
-    sub_total = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
-    tax_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
-    discount_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
-    grand_total = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
+    sub_total = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
+    tax_amount = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
+    discount_amount = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
+    grand_total = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
     
     # Payment info
-    amount_paid = models.DecimalField(max_digits=12, decimal_places=2, default=0.00)
+    amount_paid = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
     payment_status = models.CharField(max_length=20, choices=PAYMENT_STATUS_CHOICES, default='UNPAID')
     payment_method = models.CharField(max_length=20, choices=PAYMENT_METHOD_CHOICES, default='CASH')
     

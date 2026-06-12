@@ -80,14 +80,8 @@ class InvoiceSerializer(serializers.ModelSerializer):
                 quantity = item_data.get('quantity', 1)
                 unit = item_data.get('unit', 'PIECE')
                 
-                # Fetch unit price (use provided or fallback to product current price)
+                # Fetch unit price
                 unit_price = item_data.get('unit_price')
-                if not unit_price and product:
-                    # Default to current selling price (assumed to be per piece)
-                    # If it's cent, we multiply by 10.
-                    unit_price = product.selling_price
-                    if unit == 'CENT':
-                        unit_price = unit_price * 10
                 
                 InvoiceItem.objects.create(
                     invoice=invoice,
@@ -105,6 +99,92 @@ class InvoiceSerializer(serializers.ModelSerializer):
                     )
 
             return invoice
+
+    def update(self, instance, validated_data):
+        items_data = validated_data.pop('items', None)
+        customer_phone = validated_data.pop('customer_phone', None)
+        customer_name = validated_data.pop('customer_name', None)
+        
+        # Logic for creating/finding customer by phone if updated
+        if customer_phone:
+            customer, created = Customer.objects.update_or_create(
+                phone=customer_phone,
+                defaults={'name': customer_name or "Updated Customer"}
+            )
+            validated_data['customer'] = customer
+
+        with transaction.atomic():
+            # 1. Temporarily restore stock for ALL existing items to validate new state correctly
+            old_items = list(instance.items.all())
+            for item in old_items:
+                if item.product:
+                    effective_quantity = item.quantity * 10 if item.unit == 'CENT' else item.quantity
+                    Product.objects.filter(id=item.product.id).update(
+                        stock_quantity=F('stock_quantity') + effective_quantity
+                    )
+
+            # 2. Validate stock for new items (after restoration)
+            if items_data is not None:
+                for item_data in items_data:
+                    product = item_data.get('product')
+                    quantity = item_data.get('quantity', 1)
+                    unit = item_data.get('unit', 'PIECE')
+                    
+                    # Re-fetch product to get updated stock after restoration
+                    if product:
+                        product.refresh_from_db()
+                        effective_quantity = quantity * 10 if unit == 'CENT' else quantity
+                        if product.stock_quantity < effective_quantity:
+                             # ROLLBACK stock changes if validation fails
+                             for item in old_items:
+                                 if item.product:
+                                     eff = item.quantity * 10 if item.unit == 'CENT' else item.quantity
+                                     Product.objects.filter(id=item.product.id).update(
+                                         stock_quantity=F('stock_quantity') - eff
+                                     )
+                             raise serializers.ValidationError(
+                                f"Insufficient stock for product '{product.name}'. Available: {product.stock_quantity}, Requested: {effective_quantity} pieces"
+                             )
+
+            # 3. Update Invoice basic fields
+            for attr, value in validated_data.items():
+                setattr(instance, attr, value)
+            instance.save()
+
+            # 4. If items were provided, replace them
+            if items_data is not None:
+                instance.items.all().delete()
+                for item_data in items_data:
+                    product = item_data.get('product')
+                    quantity = item_data.get('quantity', 1)
+                    unit = item_data.get('unit', 'PIECE')
+                    unit_price = item_data.get('unit_price')
+                    
+                    InvoiceItem.objects.create(
+                        invoice=instance,
+                        product=product,
+                        unit=unit,
+                        quantity=quantity,
+                        unit_price=unit_price
+                    )
+
+                    # Deduct stock for new items
+                    if product:
+                        effective_quantity = quantity * 10 if unit == 'CENT' else quantity
+                        Product.objects.filter(id=product.id).update(
+                            stock_quantity=F('stock_quantity') - effective_quantity
+                        )
+            else:
+                # If items weren't provided, we MUST re-deduct the original stock 
+                # because we restored it at step 1 for validation purposes.
+                for item in old_items:
+                    if item.product:
+                        eff = item.quantity * 10 if item.unit == 'CENT' else item.quantity
+                        Product.objects.filter(id=item.product.id).update(
+                            stock_quantity=F('stock_quantity') - eff
+                        )
+
+            return instance
 
     def to_representation(self, instance):
         """Include the customer details in the output."""

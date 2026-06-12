@@ -9,15 +9,10 @@ from django.http import HttpResponse
 from .models import Invoice, InvoiceItem
 from .serializers import InvoiceSerializer, InvoiceItemSerializer, PaymentSerializer
 from products.models import Product
+from accounts.permissions import IsOwner
 from django.db.models import F
 
-# Import for PDF generation
-import io
-
-class GlobalLedgerPagination(PageNumberPagination):
-    page_size = 20
-    page_size_query_param = 'page_size'
-    max_page_size = 100
+# ... rest of imports
 
 class InvoiceViewSet(viewsets.ModelViewSet):
     queryset = Invoice.objects.all().order_by('-created_at')
@@ -27,6 +22,11 @@ class InvoiceViewSet(viewsets.ModelViewSet):
     
     filterset_fields = ['payment_status', 'payment_method', 'customer']
     search_fields = ['invoice_number', 'customer__name', 'customer__phone']
+
+    def get_permissions(self):
+        if self.action == 'destroy':
+            return [IsOwner()]
+        return super().get_permissions()
 
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
