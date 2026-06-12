@@ -119,10 +119,12 @@ body{
 <body>
 
 <div class="header">
-    <div class="store-name">VIGHNAHARTA</div>
-    <div class="tagline">FIRECRACKERS & FESTIVALS</div>
-    <div>Premium Wholesale Fireworks Depot</div>
-    <div>+91 99999 88888</div>
+    <div class="store-name">{{ company.name|upper }}</div>
+    <div class="tagline">{{ company.address|upper }}</div>
+    <div>{{ company.phone }}</div>
+    {% if company.gst_number %}
+    <div>GST: {{ company.gst_number }}</div>
+    {% endif %}
     <div class="line"></div>
     <div class="invoice-title">TAX INVOICE</div>
 </div>
@@ -215,7 +217,7 @@ body{
 <div class="footer">
 <div>Total Items: {{ invoice.items.count }}</div>
 <div class="status">{{ invoice.payment_status|upper }}</div>
-<div><b>Thank You For Your Purchase</b></div>
+<div><b>{{ company.receipt_message|default:"Thank You For Your Purchase" }}</b></div>
 <div>Visit Again</div>
 <div class="note">Goods once sold will not be taken back.</div>
 </div>

@@ -113,12 +113,17 @@ class InvoiceViewSet(viewsets.ModelViewSet):
         from django.template.loader import render_to_string
         from xhtml2pdf import pisa
         from django.utils import timezone
+        from core.models import CompanySettings
+        from django.conf import settings
+        import os
         
         invoice = self.get_object()
+        company = CompanySettings.get_settings()
         
         # Context for the template
         context = {
             'invoice': invoice,
+            'company': company,
             'now': timezone.now(),
         }
 
@@ -128,9 +133,17 @@ class InvoiceViewSet(viewsets.ModelViewSet):
         # Create a file-like buffer to receive PDF data.
         buffer = io.BytesIO()
 
+        def link_callback(uri, rel):
+            if uri.startswith(settings.MEDIA_URL):
+                path = os.path.join(settings.MEDIA_ROOT, uri.replace(settings.MEDIA_URL, ""))
+            elif uri.startswith(settings.STATIC_URL):
+                path = os.path.join(settings.STATIC_ROOT, uri.replace(settings.STATIC_URL, ""))
+            else:
+                return uri
+            return path
+
         # Create the PDF object
-        # Note: We use the default pisa.CreatePDF which works with the pinned svglib
-        pisa_status = pisa.CreatePDF(html, dest=buffer)
+        pisa_status = pisa.CreatePDF(html, dest=buffer, link_callback=link_callback)
         
         # Check for errors
         if pisa_status.err:
@@ -171,16 +184,32 @@ class InvoiceViewSet(viewsets.ModelViewSet):
         from django.template.loader import render_to_string
         from xhtml2pdf import pisa
         from django.utils import timezone
+        from core.models import CompanySettings
+        from django.conf import settings
+        import os
         
         invoice = self.get_object()
+        company = CompanySettings.get_settings()
+        
         context = {
             'invoice': invoice,
+            'company': company,
             'now': timezone.now(),
         }
 
         html = render_to_string('billing/thermal_receipt_pdf.html', context)
         buffer = io.BytesIO()
-        pisa_status = pisa.CreatePDF(html, dest=buffer)
+
+        def link_callback(uri, rel):
+            if uri.startswith(settings.MEDIA_URL):
+                path = os.path.join(settings.MEDIA_ROOT, uri.replace(settings.MEDIA_URL, ""))
+            elif uri.startswith(settings.STATIC_URL):
+                path = os.path.join(settings.STATIC_ROOT, uri.replace(settings.STATIC_URL, ""))
+            else:
+                return uri
+            return path
+
+        pisa_status = pisa.CreatePDF(html, dest=buffer, link_callback=link_callback)
         
         if pisa_status.err:
             return Response({'error': 'PDF generation failed'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
