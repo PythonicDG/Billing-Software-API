@@ -63,6 +63,8 @@ class ProductViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(stock_quantity__lte=F('min_stock_level') * 10, stock_quantity__gt=0)
         elif stock_filter == 'out_of_stock':
             queryset = queryset.filter(stock_quantity__lte=0)
+        elif stock_filter == 'available':
+            queryset = queryset.filter(stock_quantity__gt=0)
         elif stock_filter == 'top_sellers':
             from billing.models import InvoiceItem
             from django.db.models import Sum, Case, When
