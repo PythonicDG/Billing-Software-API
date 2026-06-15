@@ -12,6 +12,7 @@ import io
 from billing.models import Invoice, InvoiceItem, Payment
 from products.models import Product
 from customers.models import Customer
+from core.permissions import HasDashboardAccess
 
 
 class DashboardSummaryView(APIView):
@@ -20,7 +21,7 @@ class DashboardSummaryView(APIView):
     Returns today's sales stats, outstanding balance, low stock alerts,
     and top 5 products sold today.
     """
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, HasDashboardAccess]
 
     def get(self, request):
         range_val = request.query_params.get('range', 'today').lower()
