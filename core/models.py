@@ -7,6 +7,7 @@ class CompanySettings(models.Model):
     logo = models.ImageField(upload_to='company/', null=True, blank=True)
     gst_number = models.CharField(max_length=50, blank=True, null=True)
     receipt_message = models.TextField(default="Thank you for your business!")
+    dashboard_password = models.CharField(max_length=50, blank=True, null=True, help_text="Password to access the dashboard tab in the app")
 
     class Meta:
         verbose_name = "Company Settings"
