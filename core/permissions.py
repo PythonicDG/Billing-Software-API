@@ -32,4 +32,9 @@ class HasDashboardAccess(BasePermission):
             self.message = "Dashboard access token has expired. Please re-enter your PIN."
             return False
 
+        # Even if token is valid, block access if currently locked due to too many attempts
+        if settings_obj.is_locked:
+            self.message = f"Dashboard is temporarily locked for security. Please wait {settings_obj.lockout_remaining_seconds} seconds."
+            return False
+
         return True
