@@ -169,55 +169,6 @@ class ProductViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(product_list, many=True)
         return Response(serializer.data)
 
-    @action(detail=False, methods=['get'], url_path='export_csv')
-    def export_csv(self, request):
-        """Exports the filtered product list to a CSV file."""
-        from django.db.models import Sum
-        queryset = self.filter_queryset(self.get_queryset())
-        
-        stock_filter = request.query_params.get('stock_filter', 'all')
-        timestamp = datetime.now().strftime('%Y-%m-%d_%H%M%S')
-        filename = f"inventory_{stock_filter}_{timestamp}.csv"
-        
-        response = HttpResponse(content_type='text/csv')
-        response['Content-Disposition'] = f'attachment; filename="{filename}"'
-        
-        writer = csv.writer(response)
-        
-        header = [
-            'Name', 'Brand', 'Category', 'SKU', 'Purchase Price', 
-            'Selling Price', 'MRP', 'No Of Case', 'Cent In Per Case', 
-            'Total Stock (Cent)', 'Min Stock Level'
-        ]
-        
-        is_top_sellers = stock_filter == 'top_sellers'
-        if is_top_sellers:
-            header.append('Total Sold Qty')
-            # Annotate queryset with total sold for CSV
-            queryset = queryset.annotate(total_sold_qty=Sum('invoiceitem__quantity'))
-
-        writer.writerow(header)
-        
-        for product in queryset:
-            row = [
-                product.name,
-                product.brand,
-                product.category.name if product.category else '',
-                product.sku or '',
-                product.purchase_price,
-                product.selling_price,
-                product.mrp or '',
-                product.no_of_case,
-                product.cent_in_per_cs,
-                product.total_stock_in_cent,
-                product.min_stock_level
-            ]
-            if is_top_sellers:
-                row.append(getattr(product, 'total_sold_qty', 0))
-            writer.writerow(row)
-            
-        return response
-
     @action(detail=False, methods=['post'], url_path='bulk_upload')
     def bulk_upload(self, request):
         """Parses an uploaded CSV file and performs bulk creation/updating of products."""

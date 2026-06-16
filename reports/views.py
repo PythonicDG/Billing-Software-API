@@ -100,10 +100,6 @@ class DashboardSummaryView(APIView):
         range_bill_count = range_invoices.count()
 
         # Calculate Gross Profit
-        # Profit = Total Sales - Cost of Goods Sold (COGS)
-        # COGS = Sum(item.quantity * item.product.purchase_price * (10 if unit==CENT else 1))
-        
-        # We can calculate this more efficiently using aggregation
         range_profit_data = range_invoices.values('id').annotate(
             invoice_profit=Sum(
                 F('items__total_price') - (
@@ -124,7 +120,7 @@ class DashboardSummaryView(APIView):
         
         range_profit = range_profit_data['total_profit'] or 0
 
-        # Cash/UPI from Payment records made in range
+        # Cash/UPI from Payment records
         payment_agg = Payment.objects.filter(
             payment_date_filter
         ).values('mode').annotate(total=Sum('amount'))
@@ -137,7 +133,6 @@ class DashboardSummaryView(APIView):
             elif entry['mode'] == 'UPI':
                 range_upi = float(entry['total'] or 0)
 
-        # Count initial payments made at invoice creation in the range (includes fully paid and partial payments)
         for inv in range_invoices:
             payments_sum = sum(p.amount for p in inv.payments.all())
             initial_paid = float(inv.amount_paid) - float(payments_sum)
@@ -145,17 +140,14 @@ class DashboardSummaryView(APIView):
                 if inv.payment_method == 'UPI':
                     range_upi += initial_paid
                 else:
-                    # Treat CASH, CARD, ONLINE, etc. under cash or cash-equivalent for simplicity
                     range_cash += initial_paid
 
-        # Total outstanding across all unpaid/partial invoices (all-time)
         total_outstanding = Invoice.objects.filter(
             payment_status__in=['UNPAID', 'PARTIAL']
         ).aggregate(
             total=Sum(F('grand_total') - F('amount_paid'))
         )['total'] or 0
 
-        # Low stock products - compute using Python property to avoid unit mismatch in SQL
         all_products = Product.objects.filter(is_active=True).values(
             'id', 'name', 'brand', 'stock_quantity', 'min_stock_level'
         )
@@ -171,7 +163,6 @@ class DashboardSummaryView(APIView):
             if is_low:
                 low_stock_products.append(p)
 
-        # Top 5 products sold in range
         top_products = InvoiceItem.objects.filter(
             item_filter
         ).values('product_name_snapshot').annotate(
@@ -204,25 +195,12 @@ class DashboardSummaryView(APIView):
         })
 
 
-import csv
-from django.http import HttpResponse
-
-def generate_csv_response(filename, fieldnames, data):
-    response = HttpResponse(content_type='text/csv')
-    response['Content-Disposition'] = f'attachment; filename="{filename}.csv"'
-    writer = csv.DictWriter(response, fieldnames=fieldnames)
-    writer.writeheader()
-    for row in data:
-        writer.writerow(row)
-    return response
-
 class CustomerInsightsView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request):
         insight_type = request.query_params.get('type', 'outstanding')
         download = request.query_params.get('download', 'false') == 'true'
-        export_format = request.query_params.get('format', 'pdf')
         min_outstanding = float(request.query_params.get('min_outstanding', 0))
 
         if insight_type == 'outstanding':
@@ -243,9 +221,6 @@ class CustomerInsightsView(APIView):
             data = sorted(data, key=lambda x: x['outstanding'], reverse=True)
 
             if download:
-                if export_format == 'csv':
-                    return generate_csv_response('outstanding_report', ['name', 'phone', 'outstanding', 'days_overdue'], data)
-                
                 context = {'customers': data, 'now': timezone.now()}
                 html = render_to_string('reports/outstanding_list_pdf.html', context)
                 buffer = io.BytesIO()
@@ -283,9 +258,6 @@ class CustomerInsightsView(APIView):
             } for c in customers]
 
             if download:
-                if export_format == 'csv':
-                    return generate_csv_response('top_customers', ['name', 'phone', 'total_business', 'visit_frequency'], data)
-                # For PDF, we'd need another template, but let's stick to CSV for now or reuse outstanding if possible
                 return Response({'error': 'PDF not supported for top customers yet'}, status=400)
 
             return Response(data)
@@ -301,7 +273,6 @@ class SalesAnalyticsView(APIView):
         date_from = request.query_params.get('date_from')
         date_to = request.query_params.get('date_to')
         download = request.query_params.get('download', 'false') == 'true'
-        export_format = request.query_params.get('format', 'pdf')
 
         if date_from and date_to:
             from_date = datetime.strptime(date_from, '%Y-%m-%d').date()
@@ -319,13 +290,11 @@ class SalesAnalyticsView(APIView):
             revenue=Sum('grand_total')
         ).order_by('created_at__date')
         
-        # Correctly calculate payment split including initial invoice payments
         invoices = Invoice.objects.filter(date_filter).prefetch_related('payments')
         
         cash_total = 0
         upi_total = 0
         
-        # Calculate from Payment objects
         payments = Payment.objects.filter(payment_date_filter)
         for p in payments:
             if p.mode == 'CASH':
@@ -333,7 +302,6 @@ class SalesAnalyticsView(APIView):
             elif p.mode == 'UPI':
                 upi_total += float(p.amount)
                 
-        # Calculate initial payments
         for inv in invoices:
             total_payments = inv.payments.aggregate(Sum('amount'))['amount__sum'] or 0
             initial_paid = float(inv.amount_paid) - float(total_payments)
@@ -353,7 +321,6 @@ class SalesAnalyticsView(APIView):
             total_revenue=Sum('total_price')
         ).order_by('-units_sold')[:20]
 
-        # New: Product Profitability
         profit_data = InvoiceItem.objects.filter(item_filter).values('product_name_snapshot').annotate(
             units_sold=Sum('quantity'),
             revenue=Sum('total_price'),
@@ -375,17 +342,6 @@ class SalesAnalyticsView(APIView):
         ).order_by('-profit')[:20]
 
         if download:
-            export_data = []
-            for p in profit_data:
-                export_data.append({
-                    'Product': p['product_name_snapshot'],
-                    'Units Sold': p['units_sold'],
-                    'Revenue': float(p['revenue']),
-                    'Profit': float(p['profit'])
-                })
-            
-            if export_format == 'csv':
-                return generate_csv_response('sales_analytics', ['Product', 'Units Sold', 'Revenue', 'Profit'], export_data)
             return Response({'error': 'PDF not supported for analytics yet'}, status=400)
 
         return Response({
@@ -408,7 +364,6 @@ class OperationsFinanceView(APIView):
         date_from = request.query_params.get('date_from')
         date_to = request.query_params.get('date_to')
         download = request.query_params.get('download', 'false') == 'true'
-        export_format = request.query_params.get('format', 'pdf')
         report_type = request.query_params.get('type', 'daily_snapshot')
 
         if date_from and date_to:
@@ -479,9 +434,6 @@ class OperationsFinanceView(APIView):
             }
 
             if download:
-                if export_format == 'csv':
-                    return generate_csv_response('closing_report', data.keys(), [data])
-                # No PDF template for snapshot yet
                 return Response({'error': 'PDF not supported for snapshot'}, status=400)
 
             return Response(data)
@@ -491,7 +443,6 @@ class OperationsFinanceView(APIView):
             all_products = Product.objects.filter(is_active=True)
             low_stock_list = []
 
-            # Robust conversion for min_stock_override
             try:
                 min_stock_val = float(min_stock_override) if min_stock_override and min_stock_override.strip() else None
             except ValueError:
@@ -508,9 +459,6 @@ class OperationsFinanceView(APIView):
                     })
             
             if download:
-                if export_format == 'csv':
-                    return generate_csv_response('low_stock_report', ['name', 'brand', 'stock', 'min_level'], low_stock_list)
-                
                 context = {'products': low_stock_list, 'now': timezone.now()}
                 html = render_to_string('reports/low_stock_pdf.html', context)
                 buffer = io.BytesIO()
