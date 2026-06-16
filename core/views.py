@@ -25,68 +25,6 @@ class CompanySettingsViewSet(viewsets.GenericViewSet):
             return Response(serializer.data)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-    @action(detail=False, methods=['GET'], permission_classes=[IsOwner])
-    def backup(self, request):
-        """Returns the database file for backup."""
-        import os
-        from django.conf import settings
-        from django.http import FileResponse
-        
-        db_path = settings.DATABASES['default']['NAME']
-        if os.path.exists(db_path):
-            return FileResponse(open(db_path, 'rb'), as_attachment=True, filename='fataka_backup.sqlite3')
-        return Response({'error': 'Database file not found'}, status=status.HTTP_404_NOT_FOUND)
-
-    @action(detail=False, methods=['POST'], permission_classes=[IsOwner])
-    def restore(self, request):
-        """Restores the database from a provided sqlite3 file."""
-        password = request.data.get('password')
-        if not password or not request.user.check_password(password):
-            return Response({'error': 'Invalid password'}, status=status.HTTP_403_FORBIDDEN)
-
-        backup_file = request.FILES.get('backup_file')
-        if not backup_file:
-            return Response({'error': 'No backup file provided'}, status=status.HTTP_400_BAD_REQUEST)
-
-        import os
-        from django.conf import settings
-        
-        db_path = settings.DATABASES['default']['NAME']
-        
-        # Save the uploaded file to replace current DB
-        try:
-            with open(db_path, 'wb+') as destination:
-                for chunk in backup_file.chunks():
-                    destination.write(chunk)
-            return Response({'message': 'Database restored successfully. Please restart the application if needed.'})
-        except Exception as e:
-            return Response({'error': f'Failed to restore database: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-    @action(detail=False, methods=['POST'], permission_classes=[IsOwner])
-    def reset_data(self, request):
-        """Deletes all business data but keeps settings and staff."""
-        password = request.data.get('password')
-        if not password or not request.user.check_password(password):
-            return Response({'error': 'Invalid password'}, status=status.HTTP_403_FORBIDDEN)
-
-        from billing.models import Invoice, InvoiceItem, Payment
-        from products.models import Product, Category
-        from customers.models import Customer, CustomerLedger
-        
-        try:
-            # Delete in order to satisfy foreign keys if CASCADE not used everywhere
-            Payment.objects.all().delete()
-            InvoiceItem.objects.all().delete()
-            Invoice.objects.all().delete()
-            Product.objects.all().delete()
-            Category.objects.all().delete()
-            CustomerLedger.objects.all().delete()
-            Customer.objects.all().delete()
-            
-            return Response({'message': 'All business data has been reset successfully.'})
-        except Exception as e:
-            return Response({'error': f'Failed to reset data: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
 
 class DashboardPinViewSet(viewsets.GenericViewSet):
     """
