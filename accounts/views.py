@@ -1,12 +1,12 @@
 from rest_framework import status
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.authtoken.models import Token
 
 from .models import User
 from .permissions import IsOwner
-from .serializers import LoginSerializer, CreateStaffSerializer, StaffListSerializer
+from .serializers import LoginSerializer, CreateStaffSerializer, StaffListSerializer, ChangePasswordSerializer
 
 
 class LoginView(APIView):
@@ -107,4 +107,26 @@ class DeactivateStaffView(APIView):
                 'username': user.username,
                 'is_active': user.is_active,
             }
+        }, status=status.HTTP_200_OK)
+
+
+class ChangePasswordView(APIView):
+    """
+    POST /api/change-password/
+    Current user updates their own password.
+    Body: { old_password, new_password }
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        serializer = ChangePasswordSerializer(data=request.data, context={'request': request})
+        serializer.is_valid(raise_exception=True)
+
+        user = request.user
+        user.set_password(serializer.validated_data['new_password'])
+        user.save()
+
+        return Response({
+            'success': True,
+            'message': 'Password updated successfully.'
         }, status=status.HTTP_200_OK)
