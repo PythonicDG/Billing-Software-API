@@ -1,7 +1,6 @@
 import os
 from pathlib import Path
 import environ
-import dj_database_url
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -76,29 +75,18 @@ WSGI_APPLICATION = 'billing_api.wsgi.application'
 
 
 # Database Configuration
-# Support dynamic DATABASE_URL connection strings (Render/Railway/AWS/VPS)
-# Fallback to discrete parameters if DATABASE_URL is not set
-DATABASE_URL = env('DATABASE_URL', default='')
-if DATABASE_URL:
-    DATABASES = {
-        'default': dj_database_url.config(
-            default=DATABASE_URL,
-            conn_max_age=600,
-            conn_health_checks=True,
-        )
+# Use discrete database credentials from the .env file only (no DATABASE_URL)
+DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': env('DB_NAME'),
+        'USER': env('DB_USER'),
+        'PASSWORD': env('DB_PASSWORD'),
+        'HOST': env('DB_HOST'),
+        'PORT': env('DB_PORT'),
+        'CONN_MAX_AGE': 600,
     }
-else:
-    DATABASES = {
-        'default': {
-            'ENGINE': 'django.db.backends.postgresql',
-            'NAME': env('DB_NAME', default='vighnaharta_local'),
-            'USER': env('DB_USER', default='dipak'),
-            'PASSWORD': env('DB_PASSWORD', default='dipak'),
-            'HOST': env('DB_HOST', default='localhost'),
-            'PORT': env('DB_PORT', default='5432'),
-            'CONN_MAX_AGE': 600,
-        }
-    }
+}
 
 
 # REST Framework settings
