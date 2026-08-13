@@ -240,7 +240,7 @@ class ProductViewSet(viewsets.ModelViewSet):
                     purchase_price = Decimal(purchase_price_str) if purchase_price_str else Decimal('0.00')
                     mrp = Decimal(mrp_str) if mrp_str else None
                     no_of_case = int(no_of_case_str) if no_of_case_str else 0
-                    cent_in_per_cs = int(cent_in_per_cs_str) if cent_in_per_cs_str else 0
+                    cent_in_per_cs = Decimal(cent_in_per_cs_str) if cent_in_per_cs_str else Decimal('0.00')
                     min_stock = int(min_stock_str) if min_stock_str else 5
                 except Exception as e:
                     errors.append(f"Row {row_idx}: Formatting error in numbers: {e}")
@@ -254,6 +254,10 @@ class ProductViewSet(viewsets.ModelViewSet):
                 if sku:
                     product = Product.objects.filter(sku=sku).first()
 
+                # Determine entry_mode based on cent_in_per_cs if possible, 
+                # but for bulk upload, default to 'cent' as existing data is cent-based.
+                # Assuming incoming CSV data uses cent logic for cent_in_per_cs.
+                
                 if product:
                     product.name = name
                     product.brand = brand
@@ -277,7 +281,8 @@ class ProductViewSet(viewsets.ModelViewSet):
                         mrp=mrp,
                         no_of_case=no_of_case,
                         cent_in_per_cs=cent_in_per_cs,
-                        min_stock_level=min_stock
+                        min_stock_level=min_stock,
+                        entry_mode='cent' # Default for imported products
                     )
                     created_count += 1
 

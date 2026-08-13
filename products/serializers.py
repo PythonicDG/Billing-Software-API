@@ -23,5 +23,5 @@ class ProductSerializer(serializers.ModelSerializer):
             'purchase_price', 'selling_price', 'mrp', 
             'stock_quantity', 'min_stock_level', 'image',
             'is_low_stock', 'category', 'category_name', 'is_active', 'created_at',
-            'no_of_case', 'cent_in_per_cs', 'total_stock_in_cent'
+            'no_of_case', 'cent_in_per_cs', 'total_stock_in_cent', 'entry_mode'
         ]

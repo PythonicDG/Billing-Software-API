@@ -57,7 +57,8 @@ class Product(models.Model):
     stock_quantity = models.IntegerField(default=0)
     min_stock_level = models.IntegerField(default=5, help_text="Alert when stock falls below this number")
     no_of_case = models.IntegerField(default=0)
-    cent_in_per_cs = models.IntegerField(default=0)
+    cent_in_per_cs = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
+    entry_mode = models.CharField(max_length=10, default='cent', choices=[('cent', 'Cent'), ('piece', 'Piece')])
     
     # Status
     image = models.ImageField(upload_to='products/', blank=True, null=True, help_text="Product photo (optional)")
@@ -75,7 +76,7 @@ class Product(models.Model):
         # reduced by invoice sales) UNLESS no_of_case or cent_in_per_cs changed.
         if not self.pk:
             # New product: calculate initial stock
-            self.stock_quantity = (self.no_of_case or 0) * (self.cent_in_per_cs or 0) * 10
+            self.stock_quantity = int((self.no_of_case or 0) * (self.cent_in_per_cs or Decimal('0.00')) * 10)
         else:
             # Existing product: recalculate if stock-related fields changed
             # OR if it's currently out of stock (enables "Update" to act as a restock)
@@ -84,10 +85,10 @@ class Product(models.Model):
                 if (old.no_of_case != self.no_of_case or 
                     old.cent_in_per_cs != self.cent_in_per_cs or 
                     (old.stock_quantity <= 0 and self.no_of_case > 0)):
-                    self.stock_quantity = (self.no_of_case or 0) * (self.cent_in_per_cs or 0) * 10
+                    self.stock_quantity = int((self.no_of_case or 0) * (self.cent_in_per_cs or Decimal('0.00')) * 10)
                 # else: preserve the current stock_quantity as-is
             except Product.DoesNotExist:
-                self.stock_quantity = (self.no_of_case or 0) * (self.cent_in_per_cs or 0) * 10
+                self.stock_quantity = int((self.no_of_case or 0) * (self.cent_in_per_cs or Decimal('0.00')) * 10)
         
         super().save(*args, **kwargs)
 
