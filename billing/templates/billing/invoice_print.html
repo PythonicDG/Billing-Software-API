@@ -59,7 +59,7 @@
             <tr>
                 <td>{{ item.product_name_snapshot }}</td>
                 <td>{{ item.quantity }} {{ item.get_unit_display }}</td>
-                <td>Rs.{{ item.unit_price }}</td>
+                <td>Rs.{{ item.unit_price }} / {{ item.get_unit_display|lower }}</td>
                 <td>Rs.{{ item.total_price }}</td>
             </tr>
             {% endfor %}

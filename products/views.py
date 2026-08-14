@@ -103,12 +103,42 @@ class ProductViewSet(viewsets.ModelViewSet):
             'data': response.data
         }, status=status.HTTP_200_OK)
 
+    @action(detail=False, methods=['get'], url_path='export_csv')
+    def export_csv(self, request):
+        """Exports products to a CSV file, respecting filters and ordering."""
+        products = self.filter_queryset(self.get_queryset())
+        
+        response = HttpResponse(content_type='text/csv')
+        response['Content-Disposition'] = 'attachment; filename="products.csv"'
+        
+        writer = csv.writer(response)
+        writer.writerow([
+            'Name', 'Brand', 'Category', 'SKU', 'Purchase Price', 
+            'Selling Price', 'MRP', 'No Of Case', 'Cent In Per Case', 'Min Stock Level'
+        ])
+        
+        for product in products:
+            writer.writerow([
+                product.name,
+                product.brand,
+                product.category.name if product.category else '',
+                product.sku or '',
+                f"{product.purchase_price} / {product.entry_mode}",
+                f"{product.selling_price} / {product.entry_mode}",
+                product.mrp or '',
+                product.no_of_case,
+                product.cent_in_per_cs,
+                product.min_stock_level
+            ])
+            
+        return response
+
     @action(detail=False, methods=['get'], url_path='health_analytics')
     def health_analytics(self, request):
         """Returns inventory health analytics."""
         from django.db.models import Sum, F, DecimalField, Count, Q
         
-        products = Product.objects.filter(is_active=True)
+        products = Product.objects.all()
         
         stats = products.aggregate(
             total_value=Sum(F('stock_quantity') * F('purchase_price'), output_field=DecimalField()),

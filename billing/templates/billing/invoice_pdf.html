@@ -395,7 +395,7 @@ body {
             </td>
             <td>{{ item.get_unit_display }}</td>
             <td class="right">{{ item.quantity }}</td>
-            <td class="right">Rs. {{ item.unit_price }}</td>
+            <td class="right">Rs. {{ item.unit_price }} / {{ item.get_unit_display|lower }}</td>
             <td class="right">Rs. {{ item.total_price }}</td>
         </tr>
         {% endfor %}

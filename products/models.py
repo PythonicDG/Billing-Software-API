@@ -75,8 +75,9 @@ class Product(models.Model):
         # For updates, preserve the current stock_quantity (which may have been 
         # reduced by invoice sales) UNLESS no_of_case or cent_in_per_cs changed.
         if not self.pk:
-            # New product: calculate initial stock
-            self.stock_quantity = int((self.no_of_case or 0) * (self.cent_in_per_cs or Decimal('0.00')) * 10)
+            # New product: calculate initial stock only if fields are provided
+            if self.no_of_case > 0 or self.cent_in_per_cs > 0:
+                self.stock_quantity = int((self.no_of_case or 0) * (self.cent_in_per_cs or Decimal('0.00')) * 10)
         else:
             # Existing product: recalculate if stock-related fields changed
             # OR if it's currently out of stock (enables "Update" to act as a restock)
@@ -88,7 +89,8 @@ class Product(models.Model):
                     self.stock_quantity = int((self.no_of_case or 0) * (self.cent_in_per_cs or Decimal('0.00')) * 10)
                 # else: preserve the current stock_quantity as-is
             except Product.DoesNotExist:
-                self.stock_quantity = int((self.no_of_case or 0) * (self.cent_in_per_cs or Decimal('0.00')) * 10)
+                if self.no_of_case > 0 or self.cent_in_per_cs > 0:
+                    self.stock_quantity = int((self.no_of_case or 0) * (self.cent_in_per_cs or Decimal('0.00')) * 10)
         
         super().save(*args, **kwargs)
 
