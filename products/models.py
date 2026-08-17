@@ -99,7 +99,9 @@ class Product(models.Model):
 
     @property
     def is_low_stock(self):
-        return self.total_stock_in_cent <= self.min_stock_level
+        if self.entry_mode == 'piece':
+            return 0 < self.stock_quantity <= self.min_stock_level
+        return 0 < self.total_stock_in_cent <= self.min_stock_level
 
     @property
     def total_stock_in_cent(self):

@@ -59,8 +59,11 @@ class ProductViewSet(viewsets.ModelViewSet):
         stock_filter = self.request.query_params.get('stock_filter')
         
         if stock_filter == 'low_stock':
-            # Low Stock: 0 < stock_quantity <= min_stock_level * 10
-            queryset = queryset.filter(stock_quantity__lte=F('min_stock_level') * 10, stock_quantity__gt=0)
+            # Low Stock: 0 < stock <= min_stock_level
+            queryset = queryset.filter(
+                (Q(entry_mode='piece') & Q(stock_quantity__lte=F('min_stock_level')) & Q(stock_quantity__gt=0)) |
+                (Q(entry_mode='cent') & Q(stock_quantity__lte=F('min_stock_level') * 10) & Q(stock_quantity__gt=0))
+            )
         elif stock_filter == 'out_of_stock':
             queryset = queryset.filter(stock_quantity__lte=0)
         elif stock_filter == 'available':
@@ -162,9 +165,14 @@ class ProductViewSet(viewsets.ModelViewSet):
                     output_field=FloatField()
                 )
             ),
-            # Low Stock: total_stock_in_cent <= min_stock_level
-            # total_stock_in_cent = stock_quantity / 10.0
-            low_stock_count=Count('id', filter=Q(stock_quantity__lte=F('min_stock_level') * 10) & Q(stock_quantity__gt=0)),
+            # Low Stock: total_stock <= min_stock_level
+            low_stock_count=Count(
+                'id',
+                filter=(
+                    (Q(entry_mode='piece') & Q(stock_quantity__lte=F('min_stock_level')) & Q(stock_quantity__gt=0)) |
+                    (Q(entry_mode='cent') & Q(stock_quantity__lte=F('min_stock_level') * 10) & Q(stock_quantity__gt=0))
+                )
+            ),
             out_of_stock_count=Count('id', filter=Q(stock_quantity__lte=0))
         )
         
