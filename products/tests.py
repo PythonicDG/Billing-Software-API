@@ -76,3 +76,46 @@ class ProductInventoryTests(TestCase):
         self.assertEqual(product.cent_in_per_cs, Decimal("2.30"))
         # 5 cases * 2.3 cent * 10 = 115 pieces
         self.assertEqual(product.stock_quantity, 115)
+
+    def test_health_analytics_valuation_unit_aware(self):
+        """Verify health_analytics correctly calculates valuation for cent mode and piece mode products."""
+        # Cent Product: 10 cases * 10 cent/cs = 100 cents = 1000 pieces in DB
+        # purchase_price = 100 (per cent), selling_price = 150 (per cent)
+        # Expected total_value = 100 cents * 100 = 10,000 (NOT 1,00,000!)
+        Product.objects.create(
+            name="Cent Item",
+            brand="Standard",
+            category=self.category,
+            purchase_price=Decimal("100.00"),
+            selling_price=Decimal("150.00"),
+            no_of_case=10,
+            cent_in_per_cs=Decimal("10.0"),
+            entry_mode="cent"
+        )
+
+        # Piece Product: 5 cases * 10 pieces/cs = 50 pieces in DB
+        # purchase_price = 10 (per piece), selling_price = 15 (per piece)
+        # Expected total_value = 50 pieces * 10 = 500
+        Product.objects.create(
+            name="Piece Item",
+            brand="Standard",
+            category=self.category,
+            purchase_price=Decimal("10.00"),
+            selling_price=Decimal("15.00"),
+            no_of_case=5,
+            cent_in_per_cs=Decimal("1.0"), # 1.0 cent = 10 pieces/cs
+            entry_mode="piece"
+        )
+
+        self.client.force_authenticate(user=self.owner)
+        url = "/api/products/health_analytics/"
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(response.data["success"])
+        
+        data = response.data["data"]
+        # Total value = 10,000 (Cent Item) + 500 (Piece Item) = 10,500
+        self.assertAlmostEqual(data["total_inventory_value"], 10500.0)
+        # Potential revenue = 15,000 (Cent Item) + 750 (Piece Item) = 15,750
+        self.assertAlmostEqual(data["potential_revenue"], 15750.0)
+

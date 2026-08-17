@@ -107,8 +107,9 @@ class DashboardSummaryView(APIView):
                     F('items__quantity') * 
                     ExpressionWrapper(
                         Case(
-                            When(items__unit='CENT', then=Value(10)),
-                            default=Value(1),
+                            When(Q(items__product__entry_mode='cent') & Q(items__unit='PIECE'), then=Value(0.1)),
+                            When(Q(items__product__entry_mode='piece') & Q(items__unit='CENT'), then=Value(10.0)),
+                            default=Value(1.0),
                             output_field=FloatField(),
                         ),
                         output_field=FloatField()
@@ -329,8 +330,9 @@ class SalesAnalyticsView(APIView):
                 F('quantity') * 
                 ExpressionWrapper(
                     Case(
-                        When(unit='CENT', then=Value(10)),
-                        default=Value(1),
+                        When(Q(product__entry_mode='cent') & Q(unit='PIECE'), then=Value(0.1)),
+                        When(Q(product__entry_mode='piece') & Q(unit='CENT'), then=Value(10.0)),
+                        default=Value(1.0),
                         output_field=FloatField(),
                     ),
                     output_field=FloatField()
@@ -410,8 +412,9 @@ class OperationsFinanceView(APIView):
                         F('items__quantity') * 
                         ExpressionWrapper(
                             Case(
-                                When(items__unit='CENT', then=Value(10)),
-                                default=Value(1),
+                                When(Q(items__product__entry_mode='cent') & Q(items__unit='PIECE'), then=Value(0.1)),
+                                When(Q(items__product__entry_mode='piece') & Q(items__unit='CENT'), then=Value(10.0)),
+                                default=Value(1.0),
                                 output_field=FloatField(),
                             ),
                             output_field=FloatField()

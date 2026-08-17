@@ -136,13 +136,32 @@ class ProductViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['get'], url_path='health_analytics')
     def health_analytics(self, request):
         """Returns inventory health analytics."""
-        from django.db.models import Sum, F, DecimalField, Count, Q
+        from django.db.models import Sum, F, Count, Q, Case, When, Value, ExpressionWrapper, FloatField
         
         products = Product.objects.all()
         
+        # When entry_mode == 'cent', stock_quantity is in pieces (10 pieces = 1 cent),
+        # but purchase_price & selling_price are per cent. So multiplier is 0.1.
+        # When entry_mode == 'piece', stock_quantity and prices are per piece. Multiplier is 1.0.
+        stock_unit_multiplier = Case(
+            When(entry_mode='cent', then=Value(0.1)),
+            default=Value(1.0),
+            output_field=FloatField()
+        )
+        
         stats = products.aggregate(
-            total_value=Sum(F('stock_quantity') * F('purchase_price'), output_field=DecimalField()),
-            potential_revenue=Sum(F('stock_quantity') * F('selling_price'), output_field=DecimalField()),
+            total_value=Sum(
+                ExpressionWrapper(
+                    F('stock_quantity') * stock_unit_multiplier * F('purchase_price'),
+                    output_field=FloatField()
+                )
+            ),
+            potential_revenue=Sum(
+                ExpressionWrapper(
+                    F('stock_quantity') * stock_unit_multiplier * F('selling_price'),
+                    output_field=FloatField()
+                )
+            ),
             # Low Stock: total_stock_in_cent <= min_stock_level
             # total_stock_in_cent = stock_quantity / 10.0
             low_stock_count=Count('id', filter=Q(stock_quantity__lte=F('min_stock_level') * 10) & Q(stock_quantity__gt=0)),
