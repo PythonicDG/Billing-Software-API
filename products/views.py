@@ -10,7 +10,7 @@ from rest_framework.pagination import PageNumberPagination
 from .models import Product, Category
 from .serializers import ProductSerializer, CategorySerializer
 from accounts.permissions import IsOwnerOrReadOnly
-
+from django.db.models import Sum, F, Count, Q
 
 class StandardResultsSetPagination(PageNumberPagination):
     """Custom pagination class for better Flutter integration."""
@@ -116,22 +116,26 @@ class ProductViewSet(viewsets.ModelViewSet):
         
         writer = csv.writer(response)
         writer.writerow([
-            'Name', 'Brand', 'Category', 'SKU', 'Purchase Price', 
-            'Selling Price', 'MRP', 'No Of Case', 'Cent In Per Case', 'Min Stock Level'
+            'Name', 'Brand','Purchase Price', 
+            'Selling Price','No Of Case', 'Cent In Per Case', 'Stock Quantity'
         ])
-        
+        print(products)
         for product in products:
+            print("================================")
+            print("Product:", product.name)
+            print("No of case:", repr(product.no_of_case))
+            print("Cent in per case:", repr(product.cent_in_per_cs))
+            print("Stock quantity:", repr(product.stock_quantity))
+            print("================================")
+           
             writer.writerow([
                 product.name,
                 product.brand,
-                product.category.name if product.category else '',
-                product.sku or '',
                 f"{product.purchase_price} / {product.entry_mode}",
                 f"{product.selling_price} / {product.entry_mode}",
-                product.mrp or '',
                 product.no_of_case,
                 product.cent_in_per_cs,
-                product.min_stock_level
+                product.stock_quantity
             ])
             
         return response

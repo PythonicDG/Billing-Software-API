@@ -83,6 +83,115 @@ class InvoiceViewSet(viewsets.ModelViewSet):
 
         return Response(response_data)
 
+    @action(detail=False, methods=['GET'])
+    def download_transactions_pdf(self, request):
+        """
+        Export and download PDF of all transactions filtered by Day-wise, Date-to-Date (range), Month-wise, or All Time.
+        Includes Date, Bill Number, Customer, Total, Paid, Due, and Payment Status.
+        """
+        from django.template.loader import render_to_string
+        from xhtml2pdf import pisa
+        from django.utils import timezone
+        from datetime import datetime
+        from core.models import CompanySettings
+        from django.conf import settings
+        import os
+
+        company = CompanySettings.get_settings()
+        filter_type = request.query_params.get('filter_type', 'all')
+        date_str = request.query_params.get('date')
+        start_date_str = request.query_params.get('start_date')
+        end_date_str = request.query_params.get('end_date')
+        month = request.query_params.get('month')
+        year = request.query_params.get('year')
+        payment_status = request.query_params.get('payment_status', 'ALL')
+
+        invoices = Invoice.objects.all().select_related('customer').order_by('created_at')
+
+        period_label = "All Time (Complete History)"
+
+        if filter_type == 'day' and date_str:
+            try:
+                d = datetime.strptime(date_str, '%Y-%m-%d').date()
+                invoices = invoices.filter(created_at__date=d)
+                period_label = f"Single Day ({d.strftime('%d %b %Y')})"
+            except ValueError:
+                pass
+        elif filter_type == 'range' and start_date_str and end_date_str:
+            try:
+                start_d = datetime.strptime(start_date_str, '%Y-%m-%d').date()
+                end_d = datetime.strptime(end_date_str, '%Y-%m-%d').date()
+                invoices = invoices.filter(created_at__date__gte=start_d, created_at__date__lte=end_d)
+                period_label = f"{start_d.strftime('%d %b %Y')} to {end_d.strftime('%d %b %Y')}"
+            except ValueError:
+                pass
+        elif filter_type == 'month' and month and year:
+            try:
+                m = int(month)
+                y = int(year)
+                invoices = invoices.filter(created_at__year=y, created_at__month=m)
+                month_name = datetime(y, m, 1).strftime('%B %Y')
+                period_label = f"Month: {month_name}"
+            except (ValueError, TypeError):
+                pass
+
+        status_label = "All Statuses (Paid, Partial, Unpaid)"
+        if payment_status == 'UNPAID_PARTIAL':
+            invoices = invoices.filter(payment_status__in=['UNPAID', 'PARTIAL'])
+            status_label = "Unpaid & Partial Only"
+        elif payment_status and payment_status != 'ALL':
+            invoices = invoices.filter(payment_status=payment_status)
+            status_label = dict(Invoice.PAYMENT_STATUS_CHOICES).get(payment_status, payment_status)
+
+        total_billed = sum(inv.grand_total for inv in invoices)
+        total_paid = sum(inv.amount_paid for inv in invoices)
+        total_due = sum(inv.due_amount for inv in invoices)
+        total_count = invoices.count()
+
+        context = {
+            'company': company,
+            'invoices': invoices,
+            'period_label': period_label,
+            'status_label': status_label,
+            'filter_type': filter_type,
+            'now': timezone.localtime(timezone.now()),
+            'total_billed': total_billed,
+            'total_paid': total_paid,
+            'total_due': total_due,
+            'total_count': total_count,
+        }
+
+        html = render_to_string('billing/all_transactions_pdf.html', context)
+        buffer = io.BytesIO()
+
+        def link_callback(uri, rel):
+            if uri.startswith(settings.MEDIA_URL):
+                path = os.path.join(settings.MEDIA_ROOT, uri.replace(settings.MEDIA_URL, "", 1))
+            elif settings.MEDIA_URL in uri:
+                path = os.path.join(settings.MEDIA_ROOT, uri.split(settings.MEDIA_URL)[-1])
+            elif uri.startswith(settings.STATIC_URL):
+                path = os.path.join(settings.STATIC_ROOT, uri.replace(settings.STATIC_URL, "", 1))
+            elif settings.STATIC_URL in uri:
+                path = os.path.join(settings.STATIC_ROOT, uri.split(settings.STATIC_URL)[-1])
+            else:
+                return uri
+            return str(path)
+
+        pisa_status = pisa.CreatePDF(html, dest=buffer, link_callback=link_callback)
+        if pisa_status.err:
+            return Response({'error': 'PDF generation failed'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        pdf = buffer.getvalue()
+        buffer.close()
+
+        timestamp_str = timezone.localtime(timezone.now()).strftime('%Y%m%d_%H%M%S')
+        filename = f"transactions_{filter_type}_{timestamp_str}.pdf"
+
+        response = HttpResponse(content_type='application/pdf')
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        response.write(pdf)
+        return response
+
     @action(detail=False, methods=['POST'], permission_classes=[permissions.IsAuthenticated])
     def preview(self, request):
         """

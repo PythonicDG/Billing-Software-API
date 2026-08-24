@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <style>
+        @page {
+            size: a4;
+            margin: 1cm;
+        }
+        body {
+            font-family: 'Helvetica', 'Arial', sans-serif;
+            font-size: 9.5px;
+            color: #1e293b;
+            line-height: 1.4;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 14px;
+            border-bottom: 2px solid #2563eb;
+            padding-bottom: 8px;
+        }
+        .header h1 {
+            color: #2563eb;
+            margin: 0;
+            font-size: 20px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .header p {
+            margin: 3px 0 0;
+            font-size: 9.5px;
+            color: #64748b;
+        }
+        .info-section {
+            width: 100%;
+            margin-bottom: 14px;
+        }
+        .info-title {
+            font-weight: bold;
+            color: #2563eb;
+            border-bottom: 1px solid #cbd5e1;
+            margin-bottom: 4px;
+            padding-bottom: 2px;
+            font-size: 10.5px;
+        }
+        .summary-table {
+            width: 100%;
+            margin-bottom: 14px;
+            background-color: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+        }
+        .summary-table td {
+            padding: 8px 6px;
+            text-align: center;
+        }
+        .summary-label {
+            font-size: 8.5px;
+            color: #64748b;
+            text-transform: uppercase;
+            font-weight: bold;
+            display: block;
+        }
+        .summary-value {
+            font-size: 14px;
+            font-weight: bold;
+            color: #0f172a;
+            display: block;
+            margin-top: 2px;
+        }
+        .items-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+        }
+        .items-table th {
+            background-color: #2563eb;
+            color: white;
+            text-align: left;
+            padding: 6px 4px;
+            font-size: 8.5px;
+            text-transform: uppercase;
+            font-weight: bold;
+        }
+        .items-table td {
+            padding: 6px 4px;
+            border-bottom: 1px solid #e2e8f0;
+            font-size: 9px;
+        }
+        .items-table tr:nth-child(even) {
+            background-color: #f8fafc;
+        }
+        .status-badge {
+            padding: 2px 5px;
+            border-radius: 3px;
+            font-size: 7.5px;
+            font-weight: bold;
+            text-transform: uppercase;
+            display: inline-block;
+        }
+        .status-paid { background-color: #dcfce7; color: #16a34a; }
+        .status-partial { background-color: #ffedd5; color: #ea580c; }
+        .status-unpaid { background-color: #fee2e2; color: #dc2626; }
+        .footer {
+            position: fixed;
+            bottom: 0px;
+            left: 0;
+            right: 0;
+            text-align: center;
+            border-top: 1px solid #e2e8f0;
+            padding-top: 6px;
+            font-size: 8px;
+            color: #94a3b8;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>All Transactions Report</h1>
+        <p>{{ company.name|default:"Vighnaharta Fataka" }} | {{ company.address|default:"Shop No. 1, Main Road" }} {% if company.phone %}| Phone: {{ company.phone }}{% endif %}</p>
+    </div>
+
+    <div class="info-section">
+        <table style="width: 100%;">
+            <tr>
+                <td style="width: 60%; vertical-align: top;">
+                    <div class="info-title">Report Details</div>
+                    <p style="margin: 2px 0;">
+                        <strong>Period:</strong> {{ period_label }}<br>
+                        <strong>Status Filter:</strong> {{ status_label }}<br>
+                        <strong>Total Records:</strong> {{ total_count }} transactions
+                    </p>
+                </td>
+                <td style="width: 40%; vertical-align: top; text-align: right;">
+                    <div class="info-title">Statement Info</div>
+                    <p style="margin: 2px 0;">
+                        <strong>Generated Date:</strong> {{ now|date:"d M Y" }}<br>
+                        <strong>Generated Time:</strong> {{ now|date:"H:i" }}<br>
+                        <strong>Report ID:</strong> TXN-{{ now|date:"YmdHis" }}
+                    </p>
+                </td>
+            </tr>
+        </table>
+    </div>
+
+    <table class="summary-table">
+        <tr>
+            <td style="width: 25%;">
+                <span class="summary-label">Total Transactions</span>
+                <span class="summary-value">{{ total_count }}</span>
+            </td>
+            <td style="width: 25%;">
+                <span class="summary-label">Total Billed</span>
+                <span class="summary-value">Rs.{{ total_billed|floatformat:2 }}</span>
+            </td>
+            <td style="width: 25%;">
+                <span class="summary-label">Total Paid</span>
+                <span class="summary-value" style="color: #16a34a;">Rs.{{ total_paid|floatformat:2 }}</span>
+            </td>
+            <td style="width: 25%;">
+                <span class="summary-label">Total Due</span>
+                <span class="summary-value" style="color: #dc2626;">Rs.{{ total_due|floatformat:2 }}</span>
+            </td>
+        </tr>
+    </table>
+
+    <table class="items-table">
+        <colgroup>
+            <col style="width: 12%;">
+            <col style="width: 17%;">
+            <col style="width: 23%;">
+            <col style="width: 12%;">
+            <col style="width: 12%;">
+            <col style="width: 12%;">
+            <col style="width: 12%;">
+        </colgroup>
+        <thead>
+            <tr>
+                <th style="width: 12%;">Date</th>
+                <th style="width: 17%;">Bill No.</th>
+                <th style="width: 23%;">Customer</th>
+                <th style="width: 12%; text-align: right;">Total</th>
+                <th style="width: 12%; text-align: right;">Paid</th>
+                <th style="width: 12%; text-align: right;">Due</th>
+                <th style="width: 12%; text-align: center;">Status</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for inv in invoices %}
+            <tr>
+                <td>{{ inv.created_at|date:"d M Y" }}</td>
+                <td><strong>{{ inv.invoice_number }}</strong></td>
+                <td>
+                    {% if inv.customer %}
+                        <strong>{{ inv.customer.name }}</strong><br>
+                        <span style="color: #64748b; font-size: 8px;">{{ inv.customer.phone }}</span>
+                    {% else %}
+                        <span style="color: #64748b;">Guest</span>
+                    {% endif %}
+                </td>
+                <td style="text-align: right;">Rs.{{ inv.grand_total|floatformat:2 }}</td>
+                <td style="text-align: right; color: #16a34a;">Rs.{{ inv.amount_paid|floatformat:2 }}</td>
+                <td style="text-align: right; color: {% if inv.due_amount > 0 %}#dc2626{% else %}#16a34a{% endif %};">
+                    Rs.{{ inv.due_amount|floatformat:2 }}
+                </td>
+                <td style="text-align: center;">
+                    <span class="status-badge {% if inv.payment_status == 'PAID' %}status-paid{% elif inv.payment_status == 'PARTIAL' %}status-partial{% else %}status-unpaid{% endif %}">
+                        {{ inv.get_payment_status_display }}
+                    </span>
+                </td>
+            </tr>
+            {% empty %}
+            <tr>
+                <td colspan="7" style="text-align: center; padding: 25px; color: #64748b;">
+                    No transactions found matching the selected criteria.
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+        {% if invoices %}
+        <tfoot>
+            <tr style="background-color: #f1f5f9; font-weight: bold; border-top: 2px solid #2563eb;">
+                <td colspan="3" style="text-align: right; padding: 7px 4px;">TOTALS:</td>
+                <td style="text-align: right; padding: 7px 4px;">Rs.{{ total_billed|floatformat:2 }}</td>
+                <td style="text-align: right; color: #16a34a; padding: 7px 4px;">Rs.{{ total_paid|floatformat:2 }}</td>
+                <td style="text-align: right; color: #dc2626; padding: 7px 4px;">Rs.{{ total_due|floatformat:2 }}</td>
+                <td></td>
+            </tr>
+        </tfoot>
+        {% endif %}
+    </table>
+
+    <div style="margin-top: 25px;">
+        <p style="font-size: 8px; color: #64748b; text-align: center;">
+            This is a computer-generated transaction report from {{ company.name|default:"Vighnaharta Fataka" }}.
+        </p>
+    </div>
+
+    <div class="footer">
+        Generated by Vighnaharta Billing System
+    </div>
+</body>
+</html>

@@ -155,5 +155,5 @@ class Payment(models.Model):
     payment_date = models.DateTimeField(default=timezone.now)
     notes = models.TextField(blank=True, null=True)
 
-    def __str__(self):
+    def __str__(self): 
         return f"Payment of {self.amount} for {self.invoice.invoice_number} ({self.mode})"
