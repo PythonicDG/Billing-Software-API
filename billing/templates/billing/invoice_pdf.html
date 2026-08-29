@@ -191,7 +191,7 @@ body {
 }
 
 .items-table tbody td {
-    padding: 8px 8px;
+    padding: 4px 6px;
     vertical-align: top;
     font-size: 10.5px;
     color: #222;
@@ -203,12 +203,13 @@ body {
 
 .item-name {
     font-weight: 700;
-    font-size: 11px;
+    font-size: 10.5px;
+    line-height: 1.25;
     color: #111;
 }
 
 .item-sku {
-    font-size: 9.5px;
+    font-size: 8.5px;
     color: #888;
     margin-top: 1px;
 }
@@ -391,7 +392,6 @@ body {
         <tr>
             <td>
                 <div class="item-name">{{ item.product_name_snapshot }}</div>
-                {% if item.sku_snapshot %}<div class="item-sku">SKU: {{ item.sku_snapshot }}</div>{% endif %}
             </td>
             <td>{{ item.get_unit_display }}</td>
             <td class="right">{{ item.quantity }}</td>
