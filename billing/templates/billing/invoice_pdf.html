@@ -24,18 +24,25 @@ body {
 
 /* ── Header ── */
 .header {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
     padding-bottom: 10px;
     border-bottom: 2px solid #1a1a1a;
     margin-bottom: 12px;
 }
 
+/* Table-based layout for PDF-friendly header */
+.header-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+.header-table td {
+    vertical-align: top;
+    padding: 0;
+}
+.left-cell { width: 65%; }
+.right-cell { width: 35%; text-align: right; }
+
 .brand-block {
-    display: flex;
-    align-items: flex-start;
-    gap: 10px;
+    display: block;
 }
 
 .logo-circle {
@@ -61,9 +68,7 @@ body {
 }
 
 .company-info {
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
+    display: block;
 }
 
 .company-name {
@@ -118,11 +123,11 @@ body {
 
 /* ── Bill-to section ── */
 .bill-strip {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
+    display: block;
     padding: 8px 0;
+    margin-top: 10px;
     margin-bottom: 12px;
+    clear: both;
 }
 
 .bill-section {
@@ -145,14 +150,14 @@ body {
 }
 
 .bill-name {
-    font-size: 17px;
+    font-size: 13px;
     font-weight: 700;
     color: #111;
     margin-bottom: 2px;
 }
 
 .bill-detail {
-    font-size: 15px;
+    font-size: 10px;
     color: #555;
     line-height: 1.5;
 }
@@ -321,22 +326,29 @@ body {
 <body>
 
 <!-- ── HEADER ── -->
-<div class="header">
-    <div class="brand-block">
-        {% if company.logo %}
-            <img class="logo-img" src="{{ company.logo.url }}" alt="Logo">
-        {% else %}
-            <div class="logo-circle">{{ company.name|slice:":2"|upper }}</div>
-        {% endif %}
-        <div class="company-info">
+<table class="header-table">
+<tr>
+<td class="left-cell">
+    <table>
+    <tr>
+        <td style="width:60px; vertical-align:top;">
+            {% if company.logo %}
+                <img class="logo-img" src="{{ company.logo.url }}" alt="Logo">
+            {% else %}
+                <div class="logo-circle">{{ company.name|slice:":2"|upper }}</div>
+            {% endif %}
+        </td>
+        <td style="vertical-align:top; padding-left:10px;">
             <div class="company-name">{{ company.name|default:"Vighnaharta Fataka" }}</div>
             <div class="company-detail">
                 {{ company.address }}<br>
                 Phone: {{ company.phone }}
             </div>
-        </div>
-    </div>
-
+        </td>
+    </tr>
+    </table>
+</td>
+<td class="right-cell">
     <div class="invoice-meta">
         <div class="invoice-label">TAX INVOICE</div>
         <table class="meta-table">
@@ -362,19 +374,26 @@ body {
             </tr>
         </table>
     </div>
-</div>
+</td>
+</tr>
+</table>
 
 <!-- ── BILL TO ── -->
 <div class="bill-strip">
     <div class="bill-section">
         <div class="bill-label">Billed To</div>
-        <div class="bill-name">Name: {{ invoice.customer.name|default:"Guest Customer" }}</div>
-        <div class="bill-detail">
+
+        <div class="bill-name" style="font-size: 18px;">
+            Name: {{ invoice.customer.name|default:"Guest Customer" }}
+        </div>
+
+        <div class="bill-detail" style="font-size: 17px;">
             {% if invoice.customer.phone %}Phone: {{ invoice.customer.phone }}{% endif %}
             {% if invoice.customer.address %}<br>{{ invoice.customer.address }}{% endif %}
         </div>
     </div>
 </div>
+
 
 <!-- ── ITEMS ── -->
 <table class="items-table">
