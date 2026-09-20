@@ -182,3 +182,40 @@ class DashboardAccessToken(models.Model):
     def cleanup_expired(cls):
         """Bulk cleanup of expired tokens (can be called via management command or cron)."""
         cls.objects.filter(expires_at__lt=timezone.now()).update(is_active=False)
+
+
+class AppRelease(models.Model):
+    version = models.CharField(max_length=50, unique=True, help_text="e.g. 1.0.1")
+    release_notes = models.TextField(blank=True, default="General improvements and bug fixes.")
+    installer_file = models.FileField(
+        upload_to='updates/', 
+        blank=True, 
+        null=True, 
+        help_text="Upload .exe installer directly (or leave empty and provide direct download_url)"
+    )
+    download_url = models.URLField(
+        blank=True, 
+        null=True, 
+        help_text="Direct download link if hosted on S3, GitHub releases, Google Drive direct link, etc."
+    )
+    is_mandatory = models.BooleanField(default=False, help_text="Require user to update before using the app")
+    is_active = models.BooleanField(default=True, help_text="Whether this release is active and served to users")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = "App Release"
+        verbose_name_plural = "App Releases"
+
+    def __str__(self):
+        return f"v{self.version} ({'Active' if self.is_active else 'Inactive'})"
+
+    def get_download_url(self, request=None):
+        if self.download_url:
+            return self.download_url
+        if self.installer_file:
+            if request:
+                return request.build_absolute_uri(self.installer_file.url)
+            return self.installer_file.url
+        return ""
+

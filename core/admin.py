@@ -1,5 +1,6 @@
 from django.contrib import admin
-from .models import CompanySettings, DashboardAccessToken
+from .models import CompanySettings, DashboardAccessToken, AppRelease
+
 
 
 @admin.register(CompanySettings)
@@ -38,3 +39,17 @@ class DashboardAccessTokenAdmin(admin.ModelAdmin):
 
     def has_add_permission(self, request):
         return False  # Tokens are created programmatically only
+
+
+@admin.register(AppRelease)
+class AppReleaseAdmin(admin.ModelAdmin):
+    list_display = ('version', 'is_active', 'is_mandatory', 'download_link_display', 'created_at')
+    list_filter = ('is_active', 'is_mandatory', 'created_at')
+    search_fields = ('version', 'release_notes')
+    ordering = ('-created_at',)
+
+    def download_link_display(self, obj):
+        url = obj.get_download_url()
+        return url if url else "No file or URL provided"
+    download_link_display.short_description = "Download URL / File"
+

@@ -1,8 +1,13 @@
 from rest_framework import viewsets, permissions, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from .models import CompanySettings, DashboardAccessToken
-from .serializers import CompanySettingsSerializer, DashboardPinSetSerializer, DashboardPinVerifySerializer
+from .models import CompanySettings, DashboardAccessToken, AppRelease
+from .serializers import (
+    CompanySettingsSerializer, 
+    DashboardPinSetSerializer, 
+    DashboardPinVerifySerializer,
+    AppReleaseSerializer
+)
 from accounts.permissions import IsOwner
 
 
@@ -122,3 +127,27 @@ class DashboardPinViewSet(viewsets.GenericViewSet):
             'message': 'Dashboard PIN has been removed. Dashboard is now accessible without a PIN.',
             'has_pin': False,
         })
+
+
+class AppUpdateViewSet(viewsets.ViewSet):
+    """
+    Public endpoint to check for the latest desktop app release.
+    GET /api/core/app-update/latest/
+    """
+    permission_classes = [permissions.AllowAny]
+
+    @action(detail=False, methods=['GET'])
+    def latest(self, request):
+        latest_release = AppRelease.objects.filter(is_active=True).first()
+        if not latest_release:
+            return Response({
+                'has_update': False,
+                'message': 'No active releases available.',
+            }, status=status.HTTP_200_OK)
+
+        serializer = AppReleaseSerializer(latest_release, context={'request': request})
+        return Response({
+            'has_update': True,
+            'release': serializer.data,
+        }, status=status.HTTP_200_OK)
+

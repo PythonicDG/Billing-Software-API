@@ -1,5 +1,6 @@
 from rest_framework import serializers
-from .models import CompanySettings
+from .models import CompanySettings, AppRelease
+
 
 
 class CompanySettingsSerializer(serializers.ModelSerializer):
@@ -38,3 +39,19 @@ class DashboardPinVerifySerializer(serializers.Serializer):
         if not value.isdigit():
             raise serializers.ValidationError("PIN must contain only digits.")
         return value
+
+
+class AppReleaseSerializer(serializers.ModelSerializer):
+    download_url = serializers.SerializerMethodField()
+
+    class Meta:
+        model = AppRelease
+        fields = [
+            'id', 'version', 'release_notes', 'download_url',
+            'is_mandatory', 'created_at'
+        ]
+
+    def get_download_url(self, obj):
+        request = self.context.get('request')
+        return obj.get_download_url(request=request)
+
