@@ -208,3 +208,8 @@ LOGGING = {
         },
     },
 }
+
+# Large file upload settings (allows up to 150 MB for installer updates)
+DATA_UPLOAD_MAX_MEMORY_SIZE = 157286400  # 150 MB
+FILE_UPLOAD_MAX_MEMORY_SIZE = 157286400  # 150 MB
+
