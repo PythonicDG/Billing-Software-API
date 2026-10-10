@@ -211,11 +211,15 @@ class AppRelease(models.Model):
         return f"v{self.version} ({'Active' if self.is_active else 'Inactive'})"
 
     def get_download_url(self, request=None):
+        url = ""
         if self.download_url:
-            return self.download_url
-        if self.installer_file:
+            url = self.download_url
+        elif self.installer_file:
             if request:
-                return request.build_absolute_uri(self.installer_file.url)
-            return self.installer_file.url
-        return ""
+                url = request.build_absolute_uri(self.installer_file.url)
+            else:
+                url = self.installer_file.url
+        if url.startswith('http://') and not ('localhost' in url or '127.0.0.1' in url):
+            url = 'https://' + url[7:]
+        return url
 
