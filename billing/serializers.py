@@ -4,6 +4,7 @@ from django.db.models import F
 from products.models import Product
 from customers.models import Customer
 from .models import Invoice, InvoiceItem, Payment
+from .units import pieces_per_unit
 
 class PaymentSerializer(serializers.ModelSerializer):
     class Meta:
@@ -14,8 +15,14 @@ class PaymentSerializer(serializers.ModelSerializer):
 class InvoiceItemSerializer(serializers.ModelSerializer):
     class Meta:
         model = InvoiceItem
-        fields = ['id', 'product', 'unit', 'quantity', 'unit_price', 'total_price', 'product_name_snapshot', 'sku_snapshot']
-        read_only_fields = ['total_price', 'product_name_snapshot', 'sku_snapshot']
+        fields = ['id', 'product', 'unit', 'quantity', 'unit_price', 'total_price', 'product_name_snapshot', 'sku_snapshot', 'pieces_per_case']
+        read_only_fields = ['total_price', 'product_name_snapshot', 'sku_snapshot', 'pieces_per_case']
+
+    def validate(self, attrs):
+        if attrs.get('quantity', 1) < 1:
+            raise serializers.ValidationError({'quantity': 'Quantity must be positive.'})
+        pieces_per_unit(attrs.get('product'), attrs.get('unit', 'PIECE'))
+        return attrs
 
     def to_representation(self, instance):
         representation = super().to_representation(instance)
@@ -62,7 +69,7 @@ class InvoiceSerializer(serializers.ModelSerializer):
                 unit = item_data.get('unit', 'PIECE')
                 
                 # Calculate effective quantity in pieces
-                effective_quantity = quantity * 10 if unit == 'CENT' else quantity
+                effective_quantity = quantity * pieces_per_unit(product, unit)
                 
                 if product and product.stock_quantity < effective_quantity:
                     raise serializers.ValidationError(
@@ -100,7 +107,7 @@ class InvoiceSerializer(serializers.ModelSerializer):
 
                 # Deduct stock from Product
                 if product:
-                    effective_quantity = quantity * 10 if unit == 'CENT' else quantity
+                    effective_quantity = quantity * pieces_per_unit(product, unit)
                     Product.objects.filter(id=product.id).update(
                         stock_quantity=F('stock_quantity') - effective_quantity
                     )
@@ -125,7 +132,7 @@ class InvoiceSerializer(serializers.ModelSerializer):
             old_items = list(instance.items.all())
             for item in old_items:
                 if item.product:
-                    effective_quantity = item.quantity * 10 if item.unit == 'CENT' else item.quantity
+                    effective_quantity = item.stock_quantity
                     Product.objects.filter(id=item.product.id).update(
                         stock_quantity=F('stock_quantity') + effective_quantity
                     )
@@ -140,12 +147,12 @@ class InvoiceSerializer(serializers.ModelSerializer):
                     # Re-fetch product to get updated stock after restoration
                     if product:
                         product.refresh_from_db()
-                        effective_quantity = quantity * 10 if unit == 'CENT' else quantity
+                        effective_quantity = quantity * pieces_per_unit(product, unit)
                         if product.stock_quantity < effective_quantity:
                              # ROLLBACK stock changes if validation fails
                              for item in old_items:
                                  if item.product:
-                                     eff = item.quantity * 10 if item.unit == 'CENT' else item.quantity
+                                     eff = item.stock_quantity
                                      Product.objects.filter(id=item.product.id).update(
                                          stock_quantity=F('stock_quantity') - eff
                                      )
@@ -177,7 +184,7 @@ class InvoiceSerializer(serializers.ModelSerializer):
 
                     # Deduct stock for new items
                     if product:
-                        effective_quantity = quantity * 10 if unit == 'CENT' else quantity
+                        effective_quantity = quantity * pieces_per_unit(product, unit)
                         Product.objects.filter(id=product.id).update(
                             stock_quantity=F('stock_quantity') - effective_quantity
                         )
@@ -186,7 +193,7 @@ class InvoiceSerializer(serializers.ModelSerializer):
                 # because we restored it at step 1 for validation purposes.
                 for item in old_items:
                     if item.product:
-                        eff = item.quantity * 10 if item.unit == 'CENT' else item.quantity
+                        eff = item.stock_quantity
                         Product.objects.filter(id=item.product.id).update(
                             stock_quantity=F('stock_quantity') - eff
                         )

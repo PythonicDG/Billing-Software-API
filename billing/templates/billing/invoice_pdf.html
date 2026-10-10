@@ -1,3 +1,4 @@
+{% load invoice_pdf %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -167,6 +168,7 @@ body {
     width: 100%;
     border-collapse: collapse;
     margin-bottom: 12px;
+    table-layout: fixed;
 }
 
 .items-table thead tr {
@@ -189,6 +191,8 @@ body {
 
 .items-table tbody tr {
     border-bottom: 1px solid #ebebeb;
+    page-break-inside: avoid;
+    break-inside: avoid;
 }
 
 .items-table tbody tr:last-child {
@@ -238,14 +242,14 @@ body {
 }
 
 .totals-align-table .totals-cell {
-    width: 260px;
+    width: 280px;
     text-align: right;
     vertical-align: top;
 }
 
 .totals-table {
     border-collapse: collapse;
-    width: 260px;
+    width: 280px;
     margin-left: auto;
 }
 
@@ -262,6 +266,7 @@ body {
 }
 
 .totals-table tr td:last-child {
+    width: 140px;
     text-align: right;
     font-weight: 600;
     color: #222;
@@ -270,7 +275,7 @@ body {
 .totals-table tr.grand td {
     border-top: 2px solid #1a1a1a;
     border-bottom: 2px solid #1a1a1a;
-    font-size: 13px;
+    font-size: 11px;
     font-weight: 800;
     color: #000;
     padding: 7px 8px;
@@ -396,26 +401,34 @@ body {
 
 
 <!-- ── ITEMS ── -->
-<table class="items-table">
+<table class="items-table" repeat="1">
     <thead>
         <tr>
-            <th style="width:44%;">Item Description</th>
-            <th style="width:12%;">Unit</th>
-            <th style="width:12%;" class="right">Qty</th>
-            <th style="width:16%;" class="right">Rate</th>
-            <th style="width:16%;" class="right">Amount</th>
+            <th style="width:36%;">Item Description</th>
+            <th style="width:8%;">Unit</th>
+            <th style="width:22%;">Qty</th>
+            <th style="width:17%;" class="right">Rate</th>
+            <th style="width:17%;" class="right">Amount</th>
         </tr>
     </thead>
     <tbody>
         {% for item in invoice.items.all %}
         <tr>
             <td>
-                <div class="item-name">{{ item.product_name_snapshot }}</div>
+                {% with number=forloop.counter|stringformat:"s" %}
+                {% with name=number|add:". "|add:item.product_name_snapshot %}
+                <div class="item-name" style="font-size:{{ name|pdf_font_size:'name' }}pt; -pdf-word-wrap:{{ name|pdf_name_wrap }};">{{ name }}</div>
+                {% endwith %}
+                {% endwith %}
             </td>
             <td>{{ item.get_unit_display }}</td>
-            <td class="right">{{ item.quantity }}</td>
-            <td class="right">Rs. {{ item.unit_price }} / {{ item.get_unit_display|lower }}</td>
-            <td class="right">Rs. {{ item.total_price }}</td>
+            <td style="font-size:{{ item.pdf_quantity|pdf_font_size:'quantity' }}pt;">{{ item.pdf_quantity }}</td>
+            {% with rate=item.unit_price|stringformat:".2f" amount=item.total_price|stringformat:".2f" %}
+            {% with rate_label="Rs. "|add:rate amount_label="Rs. "|add:amount %}
+            <td class="right" style="font-size:{{ rate_label|pdf_font_size:'money' }}pt;">{{ rate_label }}</td>
+            <td class="right" style="font-size:{{ amount_label|pdf_font_size:'money' }}pt;">{{ amount_label }}</td>
+            {% endwith %}
+            {% endwith %}
         </tr>
         {% endfor %}
     </tbody>

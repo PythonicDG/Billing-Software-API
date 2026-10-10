@@ -115,10 +115,13 @@ class InvoiceItem(models.Model):
     UNIT_CHOICES = [
         ('PIECE', 'Piece'),
         ('CENT', 'Cent'),
+        ('CASE', 'Case'),
     ]
 
     unit = models.CharField(max_length=10, choices=UNIT_CHOICES, default='PIECE')
     quantity = models.PositiveIntegerField(default=1)
+    # Preserve the case size used at sale time for stock restoration and reports.
+    pieces_per_case = models.PositiveIntegerField(default=0)
     unit_price = models.DecimalField(max_digits=12, decimal_places=2)
     total_price = models.DecimalField(max_digits=12, decimal_places=2)
 
@@ -127,6 +130,9 @@ class InvoiceItem(models.Model):
             brand_str = f" ({self.product.brand})" if self.product.brand else ""
             self.product_name_snapshot = f"{self.product.name}{brand_str}"
             self.sku_snapshot = self.product.sku or ""
+            if self.unit == 'CASE' and not self.pieces_per_case:
+                from .units import pieces_per_unit
+                self.pieces_per_case = pieces_per_unit(self.product, self.unit)
         
         # Calculate total price for this item
         # If 'CENT' is selected, 1 unit means 10 pieces.
@@ -141,6 +147,26 @@ class InvoiceItem(models.Model):
 
     def __str__(self):
         return f"{self.product_name_snapshot} ({self.quantity} {self.get_unit_display()}) - {self.invoice.invoice_number}"
+
+    @property
+    def pdf_quantity(self):
+        """Case contents are per case, using the size recorded on the invoice."""
+        if self.unit != 'CASE' or not self.pieces_per_case:
+            return str(self.quantity)
+        if self.product and self.product.entry_mode == 'cent':
+            cents = format(Decimal(self.pieces_per_case) / Decimal('10'), 'f')
+            if '.' in cents:
+                cents = cents.rstrip('0').rstrip('.')
+            contents = f'{cents} cent/case'
+        else:
+            contents = f'{self.pieces_per_case} pcs/case'
+        return f'{self.quantity} ({contents})'
+
+    @property
+    def stock_quantity(self):
+        if self.unit == 'CASE':
+            return self.quantity * self.pieces_per_case
+        return self.quantity * (10 if self.unit == 'CENT' else 1)
 
 class Payment(models.Model):
     PAYMENT_MODE_CHOICES = [

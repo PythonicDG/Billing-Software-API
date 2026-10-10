@@ -202,12 +202,31 @@ class InvoiceViewSet(viewsets.ModelViewSet):
         serializer.is_valid(raise_exception=True)
         
         # Pull data but DONT save
-        data = serializer.validated_data
-        items_data = data.get('items', [])
+        data = dict(serializer.validated_data)
+        items_data = data.pop('items', [])
         
         # The serializer has already calculated basic validation.
         # Let's return the preview of what would be created.
-        preview_data = serializer.to_representation(Invoice(**data))
+        from .units import pieces_per_unit
+        from rest_framework.exceptions import ValidationError
+        invoice = Invoice(**data)
+        preview_data = serializer.to_representation(invoice)
+        preview_data['items'] = []
+        for item_data in items_data:
+            product = item_data.get('product')
+            unit = item_data.get('unit', 'PIECE')
+            multiplier = pieces_per_unit(product, unit)
+            if product and item_data['quantity'] * multiplier > product.stock_quantity:
+                raise ValidationError(f"Insufficient stock for product '{product.name}'.")
+            item = InvoiceItem(invoice=invoice, **item_data)
+            item.total_price = item.quantity * item.unit_price
+            if product:
+                brand = f" ({product.brand})" if product.brand else ''
+                item.product_name_snapshot = f"{product.name}{brand}"
+                item.sku_snapshot = product.sku or ''
+            if unit == 'CASE':
+                item.pieces_per_case = multiplier
+            preview_data['items'].append(InvoiceItemSerializer(item).data)
         # Note: Invoice number won't be generated since we didn't save.
         preview_data['invoice_number'] = "PREVIEW-ONLY"
         
@@ -228,6 +247,9 @@ class InvoiceViewSet(viewsets.ModelViewSet):
         
         invoice = self.get_object()
         company = CompanySettings.get_settings()
+        # Quantity annotations use the product's cent/piece display mode.
+        from django.db.models import prefetch_related_objects
+        prefetch_related_objects([invoice], 'items__product')
         
         # Context for the template
         context = {
@@ -383,7 +405,7 @@ class InvoiceViewSet(viewsets.ModelViewSet):
         # Restore stock for each item in the invoice
         for item in instance.items.all():
             if item.product:
-                effective_quantity = item.quantity * 10 if item.unit == 'CENT' else item.quantity
+                effective_quantity = item.stock_quantity
                 Product.objects.filter(id=item.product.id).update(
                     stock_quantity=F('stock_quantity') + effective_quantity
                 )

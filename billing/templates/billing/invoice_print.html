@@ -57,7 +57,7 @@
         <tbody>
             {% for item in invoice.items.all %}
             <tr>
-                <td>{{ item.product_name_snapshot }}</td>
+                <td>{{ forloop.counter }}.&nbsp; {{ item.product_name_snapshot }}</td>
                 <td>{{ item.quantity }} {{ item.get_unit_display }}</td>
                 <td>Rs.{{ item.unit_price }} / {{ item.get_unit_display|lower }}</td>
                 <td>Rs.{{ item.total_price }}</td>
