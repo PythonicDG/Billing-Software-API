@@ -167,7 +167,12 @@ class InvoiceSerializer(serializers.ModelSerializer):
                                 f"Insufficient stock for product '{product.name}'. Available: {product.stock_quantity}, Requested: {effective_quantity} pieces"
                              )
 
-            # 3. Update Invoice basic fields
+            # 3. Editing the paid amount replaces it, so earlier payment history
+            # would no longer add up. Clear it to keep records consistent.
+            if 'amount_paid' in validated_data:
+                instance.payments.all().delete()
+
+            # 3b. Update Invoice basic fields
             for attr, value in validated_data.items():
                 setattr(instance, attr, value)
             instance.save()
