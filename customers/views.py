@@ -1,3 +1,4 @@
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from rest_framework import viewsets, permissions, filters, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -91,12 +92,24 @@ class CustomerViewSet(viewsets.ModelViewSet):
         mode = request.data.get('mode', 'CASH')
         notes = request.data.get('notes', '')
 
-        if amount is None or float(amount) <= 0:
+        # Money maths is done in Decimal (rounded to paise) to avoid float drift.
+        try:
+            amount = Decimal(str(amount).strip()).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+        except (InvalidOperation, ValueError, TypeError):
             return Response({'error': 'Invalid amount'}, status=status.HTTP_400_BAD_REQUEST)
 
-        amount = float(amount)
-        
+        if not amount.is_finite() or amount <= 0:
+            return Response({'error': 'Invalid amount'}, status=status.HTTP_400_BAD_REQUEST)
+
         from billing.models import Invoice, Payment
+
+        mode = str(mode).strip().upper() if mode is not None else 'CASH'
+        valid_modes = [m for m, _ in Payment.PAYMENT_MODE_CHOICES]
+        if mode not in valid_modes:
+            return Response(
+                {'error': f"Invalid mode. Must be one of: {', '.join(valid_modes)}"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
         with transaction.atomic():
             # Get outstanding invoices for this customer, oldest first
@@ -107,7 +120,7 @@ class CustomerViewSet(viewsets.ModelViewSet):
                 if remaining_payment <= 0:
                     break
                 
-                outstanding = float(invoice.grand_total - invoice.amount_paid)
+                outstanding = Decimal(invoice.grand_total) - Decimal(invoice.amount_paid)
                 payment_to_apply = min(remaining_payment, outstanding)
                 
                 Payment.objects.create(
@@ -117,7 +130,7 @@ class CustomerViewSet(viewsets.ModelViewSet):
                     notes=f"{notes} (Bulk payment)".strip()
                 )
                 
-                invoice.amount_paid = float(invoice.amount_paid) + payment_to_apply
+                invoice.amount_paid = Decimal(invoice.amount_paid) + payment_to_apply
                 invoice.save()
                 
                 remaining_payment -= payment_to_apply
@@ -127,8 +140,8 @@ class CustomerViewSet(viewsets.ModelViewSet):
 
         return Response({
             'status': 'success', 
-            'applied_amount': amount - remaining_payment,
-            'remaining_advance': remaining_payment
+            'applied_amount': float(amount - remaining_payment),
+            'remaining_advance': float(remaining_payment)
         })
 
     @action(detail=True, methods=['GET'])
