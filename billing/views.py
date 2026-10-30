@@ -21,8 +21,6 @@ def invoice_snapshot(invoice):
         'customer': invoice.customer.name if invoice.customer else 'Guest',
         'customer_phone': invoice.customer.phone if invoice.customer else '',
         'sub_total': str(invoice.sub_total),
-        'tax_amount': str(invoice.tax_amount),
-        'discount_amount': str(invoice.discount_amount),
         'grand_total': str(invoice.grand_total),
         'amount_paid': str(invoice.amount_paid),
         'payment_status': invoice.payment_status,

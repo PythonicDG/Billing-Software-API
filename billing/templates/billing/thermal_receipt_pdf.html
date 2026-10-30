@@ -180,19 +180,6 @@ body{
 <td class="right">Rs.{{ invoice.sub_total }}</td>
 </tr>
 
-{% if invoice.tax_amount > 0 %}
-<tr>
-<td>GST</td>
-<td class="right">Rs.{{ invoice.tax_amount }}</td>
-</tr>
-{% endif %}
-
-{% if invoice.discount_amount > 0 %}
-<tr>
-<td>Discount</td>
-<td class="right">-Rs.{{ invoice.discount_amount }}</td>
-</tr>
-{% endif %}
 
 <tr class="grand-total">
 <td>TOTAL</td>

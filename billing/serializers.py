@@ -43,7 +43,7 @@ class InvoiceSerializer(serializers.ModelSerializer):
         model = Invoice
         fields = [
             'id', 'invoice_number', 'customer', 'customer_phone', 'customer_name',
-            'sub_total', 'tax_amount', 'discount_amount', 'grand_total',
+            'sub_total', 'grand_total',
             'paid_amount', 'amount_paid', 'total_amount', 'due_amount', 'outstanding_balance',
             'payment_status', 'payment_method', 'items', 'created_by', 'created_at'
         ]

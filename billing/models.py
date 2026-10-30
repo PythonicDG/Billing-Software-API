@@ -24,8 +24,6 @@ class Invoice(models.Model):
     
     # Pricing Summary
     sub_total = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
-    tax_amount = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
-    discount_amount = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
     grand_total = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
     
     # Payment info

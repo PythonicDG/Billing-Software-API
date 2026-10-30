@@ -189,10 +189,10 @@ class AuditLogTests(TestCase):
     def test_edit_logs_before_and_after(self):
         from core.models import AuditLog
         bill_id = self.make_bill()
-        response = self.client.patch(f'/api/billing/invoices/{bill_id}/', {'discount_amount': '5.00'}, format='json')
+        response = self.client.patch(f'/api/billing/invoices/{bill_id}/', {'sub_total': '25.00'}, format='json')
         self.assertEqual(response.status_code, 200, response.content)
         entry = AuditLog.objects.get(action=AuditLog.UPDATE)
-        self.assertEqual(entry.details['changes']['discount_amount'], {'from': '0.00', 'to': '5.00'})
+        self.assertEqual(entry.details['changes']['sub_total'], {'from': '20.00', 'to': '25.00'})
 
     def test_audit_entries_are_immutable(self):
         from core.models import AuditLog
