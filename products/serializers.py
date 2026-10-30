@@ -25,3 +25,18 @@ class ProductSerializer(serializers.ModelSerializer):
             'is_low_stock', 'category', 'category_name', 'is_active', 'created_at',
             'no_of_case', 'cent_in_per_cs', 'total_stock_in_cent', 'entry_mode'
         ]
+
+    def validate_selling_price(self, value):
+        if value <= 0:
+            raise serializers.ValidationError('Selling price must be greater than zero.')
+        return value
+
+    def validate_purchase_price(self, value):
+        if value < 0:
+            raise serializers.ValidationError('Purchase price cannot be negative.')
+        return value
+
+    def validate_mrp(self, value):
+        if value is not None and value < 0:
+            raise serializers.ValidationError('MRP cannot be negative.')
+        return value

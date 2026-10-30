@@ -8,7 +8,6 @@ from .serializers import (
     DashboardPinVerifySerializer,
     AppReleaseSerializer
 )
-from accounts.permissions import IsOwner
 
 
 class CompanySettingsViewSet(viewsets.GenericViewSet):
@@ -37,10 +36,10 @@ class DashboardPinViewSet(viewsets.GenericViewSet):
     
     Endpoints:
         GET  /status/       — Check if a PIN is set (any authenticated user)
-        POST /set_pin/      — Set or update the PIN (OWNER only)
+        POST /set_pin/      — Set or update the PIN 
         POST /verify/       — Verify PIN and get a temporary access token
         POST /revoke/       — Revoke the current dashboard access token
-        POST /remove_pin/   — Remove PIN protection entirely (OWNER only)
+        POST /remove_pin/   — Remove PIN protection entirely 
     """
     permission_classes = [permissions.IsAuthenticated]
 
@@ -54,9 +53,9 @@ class DashboardPinViewSet(viewsets.GenericViewSet):
             'lockout_remaining_seconds': settings_obj.lockout_remaining_seconds,
         })
 
-    @action(detail=False, methods=['POST'], permission_classes=[IsOwner])
+    @action(detail=False, methods=['POST'])
     def set_pin(self, request):
-        """Set or update the dashboard PIN. OWNER only."""
+        """Set or update the dashboard PIN."""
         serializer = DashboardPinSetSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
@@ -114,9 +113,9 @@ class DashboardPinViewSet(viewsets.GenericViewSet):
         DashboardAccessToken.revoke_for_user(request.user)
         return Response({'message': 'Dashboard access revoked.'})
 
-    @action(detail=False, methods=['POST'], permission_classes=[IsOwner])
+    @action(detail=False, methods=['POST'])
     def remove_pin(self, request):
-        """Remove the dashboard PIN entirely. OWNER only."""
+        """Remove the dashboard PIN entirely."""
         settings_obj = CompanySettings.get_settings()
         settings_obj.remove_pin()
 

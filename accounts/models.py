@@ -22,15 +22,3 @@ class User(AbstractUser):
 
     def __str__(self):
         return f"{self.email} ({self.role})"
-
-    @property
-    def is_owner(self):
-        return self.role == self.OWNER
-
-    @property
-    def is_staff_member(self):
-        return self.role == self.STAFF
-
-    @property
-    def is_viewer(self):
-        return self.role == self.VIEWER

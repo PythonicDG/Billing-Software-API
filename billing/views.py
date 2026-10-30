@@ -9,7 +9,6 @@ from django.http import HttpResponse
 from .models import Invoice, InvoiceItem
 from .serializers import InvoiceSerializer, InvoiceItemSerializer, PaymentSerializer
 from products.models import Product
-from accounts.permissions import IsOwner
 from django.db.models import F
 import io
 
@@ -26,11 +25,6 @@ class InvoiceViewSet(viewsets.ModelViewSet):
     
     filterset_fields = ['payment_status', 'payment_method', 'customer']
     search_fields = ['invoice_number', 'customer__name', 'customer__phone']
-
-    def get_permissions(self):
-        if self.action == 'destroy':
-            return [IsOwner()]
-        return super().get_permissions()
 
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
@@ -386,6 +380,12 @@ class InvoiceViewSet(viewsets.ModelViewSet):
         if amount <= 0:
             return Response(
                 {'amount': ['Payment amount must be greater than zero.']},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if amount > invoice.due_amount:
+            return Response(
+                {'amount': [f'Payment exceeds the amount due ({invoice.due_amount}).']},
                 status=status.HTTP_400_BAD_REQUEST
             )
             

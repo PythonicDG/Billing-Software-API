@@ -7,7 +7,7 @@ A professional, high-performance REST API built with **Django & Django REST Fram
 ## 🏗️ Architecture & Features
 
 -   **Modular Architecture**: Clean separation into `accounts`, `products`, `billing`, and `customers`.
--   **Security**: Role-Based Access Control (**Owner**, **Staff**, **Viewer**) with Token Authentication.
+-   **Security**: Single-user Token Authentication.
 -   **Inventory**: Unique SKU generation, stock alerts, and firecracker-specific attributes.
 -   **Media**: Support for product image uploads.
 -   **Production Ready**: Configured for **PostgreSQL**, **WhiteNoise**, and **Gunicorn**.
@@ -19,7 +19,7 @@ A professional, high-performance REST API built with **Django & Django REST Fram
 
 | Status | Module | Description |
 | :--- | :--- | :--- |
-| ✅ Done | **Authentication** | Token Auth, Role Management (Owner/Staff/Viewer) |
+| ✅ Done | **Authentication** | Token Auth (single user) |
 | ✅ Done | **Inventory** | CRUD, SKU Auto-gen, Search/Filter, Image support |
 | ✅ Done | **Data Seeding** | Custom command to fill 100+ firecracker products |
 | 🚧 In Prog | **Billing** | Invoices, Bill Items, Cart Integration |
@@ -65,10 +65,9 @@ python manage.py runserver
 
 | Method | Endpoint | Description |
 | :--- | :--- | :--- |
-| `POST` | `/api/login/` | Returns auth token and user role |
+| `POST` | `/api/login/` | Returns auth token |
 | `GET` | `/api/products/` | List all inventory (Search & Pagination) |
 | `POST` | `/api/products/` | Add new firecracker (Owner Only) |
-| `POST` | `/api/staff/create/` | Set up a new employee account |
 
 ---
 

@@ -22,6 +22,15 @@ class CustomerViewSet(viewsets.ModelViewSet):
     search_fields = ['name', 'phone']
     ordering_fields = ['created_at', 'name']
 
+    def destroy(self, request, *args, **kwargs):
+        customer = self.get_object()
+        if customer.invoices.exists():
+            return Response(
+                {'error': 'This customer has invoices and cannot be deleted.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        return super().destroy(request, *args, **kwargs)
+
     @action(detail=True, methods=['GET'])
     def ledger(self, request, pk=None):
         customer = self.get_object()

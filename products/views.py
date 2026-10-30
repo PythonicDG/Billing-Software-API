@@ -9,7 +9,6 @@ from rest_framework.pagination import PageNumberPagination
 
 from .models import Product, Category
 from .serializers import ProductSerializer, CategorySerializer
-from accounts.permissions import IsOwnerOrReadOnly
 from django.db.models import Sum, F, Count, Q
 
 class StandardResultsSetPagination(PageNumberPagination):
@@ -30,21 +29,19 @@ class StandardResultsSetPagination(PageNumberPagination):
 
 class CategoryViewSet(viewsets.ModelViewSet):
     """
-    ViewSet for managing Categories (Owner can CUD, Staff can Read).
+    ViewSet for managing Categories .
     """
     queryset = Category.objects.all().order_by('name')
     serializer_class = CategorySerializer
-    permission_classes = [IsOwnerOrReadOnly]
     pagination_class = None  # No pagination for category dropdowns
 
 
 class ProductViewSet(viewsets.ModelViewSet):
     """
-    ViewSet for managing inventory (Owner can CUD, Staff can Read).
+    ViewSet for managing inventory .
     Features: Pagination, Search by name/brand/category, Sorting.
     """
     serializer_class = ProductSerializer
-    permission_classes = [IsOwnerOrReadOnly]
     pagination_class = StandardResultsSetPagination
     
     # Built-in search & ordering

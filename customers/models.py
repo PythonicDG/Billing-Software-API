@@ -15,9 +15,16 @@ class Customer(models.Model):
 
     @property
     def outstanding_balance(self):
-        from django.db.models import Sum, F
+        from django.db.models import Sum, F, Case, When, Value, DecimalField
+        # Per-invoice dues are floored at 0 so an overpaid invoice can never
+        # reduce what the customer owes on other invoices.
+        due = F('grand_total') - F('amount_paid')
         res = self.invoices.aggregate(
-            total=Sum(F('grand_total') - F('amount_paid'))
+            total=Sum(Case(
+                When(grand_total__gt=F('amount_paid'), then=due),
+                default=Value(0),
+                output_field=DecimalField(max_digits=12, decimal_places=2),
+            ))
         )
         val = res.get('total')
         return float(val) if val is not None else 0.0

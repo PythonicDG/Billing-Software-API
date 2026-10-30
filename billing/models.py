@@ -23,7 +23,7 @@ class Invoice(models.Model):
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     invoice_number = models.CharField(max_length=50, unique=True, db_index=True)
-    customer = models.ForeignKey(Customer, on_delete=models.SET_NULL, null=True, blank=True, related_name='invoices')
+    customer = models.ForeignKey(Customer, on_delete=models.PROTECT, null=True, blank=True, related_name='invoices')
     
     # Pricing Summary
     sub_total = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
@@ -66,6 +66,12 @@ class Invoice(models.Model):
                 
             self.invoice_number = f"INV-{today}-{count:04d}"
         
+        # Cash tendered above the bill total is change returned, not money received.
+        # Never store more than the bill total as paid, otherwise the customer ledger
+        # goes below the dashboard outstanding.
+        if self.amount_paid > self.grand_total:
+            self.amount_paid = self.grand_total
+
         # Calculate payment status
         if self.amount_paid >= self.grand_total:
             self.payment_status = 'PAID'

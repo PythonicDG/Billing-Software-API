@@ -21,6 +21,8 @@ class InvoiceItemSerializer(serializers.ModelSerializer):
     def validate(self, attrs):
         if attrs.get('quantity', 1) < 1:
             raise serializers.ValidationError({'quantity': 'Quantity must be positive.'})
+        if 'unit_price' in attrs and attrs['unit_price'] <= 0:
+            raise serializers.ValidationError({'unit_price': 'Unit price must be greater than zero.'})
         pieces_per_unit(attrs.get('product'), attrs.get('unit', 'PIECE'))
         return attrs
 
@@ -46,6 +48,11 @@ class InvoiceSerializer(serializers.ModelSerializer):
             'payment_status', 'payment_method', 'items', 'created_by', 'created_at'
         ]
         read_only_fields = ['invoice_number', 'due_amount', 'outstanding_balance', 'payment_status', 'created_by', 'created_at']
+
+    def validate_paid_amount(self, value):
+        if value < 0:
+            raise serializers.ValidationError('Paid amount cannot be negative.')
+        return value
 
     def create(self, validated_data):
         items_data = validated_data.pop('items')
