@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import CompanySettings, AppRelease
+from .models import CompanySettings, AppRelease, AuditLog
 
 
 
@@ -55,3 +55,16 @@ class AppReleaseSerializer(serializers.ModelSerializer):
         request = self.context.get('request')
         return obj.get_download_url(request=request)
 
+
+
+class AuditLogSerializer(serializers.ModelSerializer):
+    action_display = serializers.CharField(source='get_action_display', read_only=True)
+
+    class Meta:
+        model = AuditLog
+        fields = [
+            'id', 'timestamp', 'user', 'user_label', 'action', 'action_display',
+            'entity_type', 'entity_id', 'entity_label', 'summary', 'reason',
+            'details', 'ip_address',
+        ]
+        read_only_fields = fields

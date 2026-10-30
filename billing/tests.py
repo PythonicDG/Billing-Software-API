@@ -151,3 +151,63 @@ class CaseBillingTests(TestCase):
         self.assertIn('2 (2.3 cent/case)', text)
         self.assertIn('9999999999.99', text)
         self.assertIn(name, ' '.join(text.split()))
+
+
+class AuditLogTests(TestCase):
+    def setUp(self):
+        from rest_framework.test import APIClient
+        self.owner = User.objects.create_user(
+            username='owner', email='owner@example.com', password='x', role=User.OWNER)
+        self.staff = User.objects.create_user(
+            username='staff', email='staff@example.com', password='x', role=User.STAFF)
+        self.product = Product.objects.create(
+            name='Rocket', selling_price=Decimal('10'), purchase_price=Decimal('5'),
+            mrp=Decimal('12'), stock_quantity=10)
+        self.client = APIClient()
+        self.client.force_authenticate(self.owner)
+
+    def make_bill(self):
+        response = self.client.post('/api/billing/invoices/', {
+            'grand_total': '20.00', 'sub_total': '20.00', 'paid_amount': '20.00',
+            'items': [{'product': str(self.product.id), 'quantity': 2, 'unit': 'PIECE', 'unit_price': '10.00'}],
+        }, format='json')
+        self.assertEqual(response.status_code, 201, response.content)
+        return response.data['id']
+
+    def test_delete_paid_bill_is_logged_with_user_and_reason(self):
+        from core.models import AuditLog
+        bill_id = self.make_bill()
+        response = self.client.delete(f'/api/billing/invoices/{bill_id}/', {'reason': 'duplicate bill'}, format='json')
+        self.assertEqual(response.status_code, 204)
+        entry = AuditLog.objects.get(action=AuditLog.DELETE)
+        self.assertEqual(entry.user, self.owner)
+        self.assertIn('owner@example.com', entry.user_label)
+        self.assertEqual(entry.reason, 'duplicate bill')
+        self.assertEqual(entry.details['before']['payment_status'], 'PAID')
+        self.assertEqual(entry.details['before']['items'][0]['quantity'], 2)
+
+    def test_edit_logs_before_and_after(self):
+        from core.models import AuditLog
+        bill_id = self.make_bill()
+        response = self.client.patch(f'/api/billing/invoices/{bill_id}/', {'discount_amount': '5.00'}, format='json')
+        self.assertEqual(response.status_code, 200, response.content)
+        entry = AuditLog.objects.get(action=AuditLog.UPDATE)
+        self.assertEqual(entry.details['changes']['discount_amount'], {'from': '0.00', 'to': '5.00'})
+
+    def test_audit_entries_are_immutable(self):
+        from core.models import AuditLog
+        self.make_bill()
+        entry = AuditLog.objects.get()
+        with self.assertRaises(PermissionError):
+            entry.delete()
+        entry.summary = 'tampered'
+        with self.assertRaises(PermissionError):
+            entry.save()
+
+    def test_only_owner_can_read_logs(self):
+        from rest_framework.test import APIClient
+        self.make_bill()
+        self.assertEqual(self.client.get('/api/core/audit-logs/').status_code, 200)
+        staff_client = APIClient()
+        staff_client.force_authenticate(self.staff)
+        self.assertEqual(staff_client.get('/api/core/audit-logs/').status_code, 403)

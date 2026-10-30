@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import CompanySettings, DashboardAccessToken, AppRelease
+from .models import CompanySettings, DashboardAccessToken, AppRelease, AuditLog
 
 
 
@@ -53,3 +53,20 @@ class AppReleaseAdmin(admin.ModelAdmin):
         return url if url else "No file or URL provided"
     download_link_display.short_description = "Download URL / File"
 
+
+
+@admin.register(AuditLog)
+class AuditLogAdmin(admin.ModelAdmin):
+    list_display = ('timestamp', 'user_label', 'action', 'entity_type', 'entity_label', 'summary')
+    list_filter = ('action', 'entity_type', 'timestamp')
+    search_fields = ('user_label', 'entity_label', 'entity_id', 'summary', 'reason')
+    date_hierarchy = 'timestamp'
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False

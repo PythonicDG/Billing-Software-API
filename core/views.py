@@ -1,12 +1,13 @@
 from rest_framework import viewsets, permissions, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from .models import CompanySettings, DashboardAccessToken, AppRelease
+from .models import CompanySettings, DashboardAccessToken, AppRelease, AuditLog
 from .serializers import (
     CompanySettingsSerializer, 
     DashboardPinSetSerializer, 
     DashboardPinVerifySerializer,
-    AppReleaseSerializer
+    AppReleaseSerializer,
+    AuditLogSerializer,
 )
 
 
@@ -150,3 +151,36 @@ class AppUpdateViewSet(viewsets.ViewSet):
             'release': serializer.data,
         }, status=status.HTTP_200_OK)
 
+
+
+class IsOwner(permissions.BasePermission):
+    def has_permission(self, request, view):
+        user = request.user
+        return bool(user and user.is_authenticated and (user.role == 'OWNER' or user.is_superuser))
+
+
+class AuditLogViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    GET /api/core/audit-logs/ — Owner only, newest first.
+    Filters: ?action=DELETE &entity_type=Invoice &entity_id= &user= &date_from=YYYY-MM-DD &date_to=YYYY-MM-DD &search=
+    """
+    queryset = AuditLog.objects.all()
+    serializer_class = AuditLogSerializer
+    permission_classes = [IsOwner]
+
+    def get_queryset(self):
+        from django.db.models import Q
+        qs = super().get_queryset()
+        params = self.request.query_params
+        for field in ('action', 'entity_type', 'entity_id', 'user'):
+            if params.get(field):
+                qs = qs.filter(**{field: params[field]})
+        if params.get('date_from'):
+            qs = qs.filter(timestamp__date__gte=params['date_from'])
+        if params.get('date_to'):
+            qs = qs.filter(timestamp__date__lte=params['date_to'])
+        if params.get('search'):
+            q = params['search']
+            qs = qs.filter(Q(entity_label__icontains=q) | Q(summary__icontains=q)
+                           | Q(reason__icontains=q) | Q(user_label__icontains=q))
+        return qs

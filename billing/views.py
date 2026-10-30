@@ -10,7 +10,44 @@ from .models import Invoice, InvoiceItem
 from .serializers import InvoiceSerializer, InvoiceItemSerializer, PaymentSerializer
 from products.models import Product
 from django.db.models import F
+from core.audit import log_action
+from core.models import AuditLog
 import io
+
+def invoice_snapshot(invoice):
+    """Plain-data copy of an invoice, its items and payments, for the audit trail."""
+    return {
+        'invoice_number': invoice.invoice_number,
+        'customer': invoice.customer.name if invoice.customer else 'Guest',
+        'customer_phone': invoice.customer.phone if invoice.customer else '',
+        'sub_total': str(invoice.sub_total),
+        'tax_amount': str(invoice.tax_amount),
+        'discount_amount': str(invoice.discount_amount),
+        'grand_total': str(invoice.grand_total),
+        'amount_paid': str(invoice.amount_paid),
+        'payment_status': invoice.payment_status,
+        'payment_method': invoice.payment_method,
+        'created_at': invoice.created_at.isoformat(),
+        'created_by': invoice.created_by.email if invoice.created_by else None,
+        'items': [
+            {
+                'product': i.product_name_snapshot, 'sku': i.sku_snapshot, 'unit': i.unit,
+                'quantity': i.quantity, 'unit_price': str(i.unit_price),
+                'total_price': str(i.total_price),
+            }
+            for i in invoice.items.all()
+        ],
+        'payments': [
+            {'amount': str(p.amount), 'mode': p.mode, 'date': p.payment_date.isoformat(),
+             'notes': p.notes or ''}
+            for p in invoice.payments.all()
+        ],
+    }
+
+
+def _changes(before, after):
+    return {k: {'from': before[k], 'to': after[k]} for k in before if before[k] != after[k]}
+
 
 class GlobalLedgerPagination(PageNumberPagination):
     page_size = 20
@@ -27,7 +64,25 @@ class InvoiceViewSet(viewsets.ModelViewSet):
     search_fields = ['invoice_number', 'customer__name', 'customer__phone']
 
     def perform_create(self, serializer):
-        serializer.save(created_by=self.request.user)
+        with transaction.atomic():
+            invoice = serializer.save(created_by=self.request.user)
+            log_action(
+                self.request, AuditLog.CREATE, 'Invoice', invoice.id, invoice.invoice_number,
+                f"Created bill {invoice.invoice_number} (total {invoice.grand_total})",
+                details={'after': invoice_snapshot(invoice)},
+            )
+
+    def perform_update(self, serializer):
+        with transaction.atomic():
+            before = invoice_snapshot(serializer.instance)
+            invoice = serializer.save()
+            after = invoice_snapshot(invoice)
+            log_action(
+                self.request, AuditLog.UPDATE, 'Invoice', invoice.id, invoice.invoice_number,
+                f"Edited bill {invoice.invoice_number}",
+                reason=self.request.data.get('reason', ''),
+                details={'changes': _changes(before, after), 'before': before, 'after': after},
+            )
 
     @action(detail=False, methods=['GET'])
     def all_transactions(self, request):
@@ -393,15 +448,32 @@ class InvoiceViewSet(viewsets.ModelViewSet):
             payment = serializer.save()
             
             # Update amount_paid on invoice
+            paid_before = invoice.amount_paid
             invoice.amount_paid += amount
             invoice.save()
+            log_action(
+                request, AuditLog.PAYMENT, 'Invoice', invoice.id, invoice.invoice_number,
+                f"Recorded {payment.mode} payment of {amount} on {invoice.invoice_number}",
+                details={'amount': str(amount), 'mode': payment.mode,
+                         'amount_paid_before': str(paid_before),
+                         'amount_paid_after': str(invoice.amount_paid),
+                         'payment_status': invoice.payment_status},
+            )
             
         return Response(PaymentSerializer(payment).data, status=status.HTTP_201_CREATED)
 
     @transaction.atomic
     def destroy(self, request, *args, **kwargs):
         instance = self.get_object()
-        
+        # The reason may arrive as a body field or a ?reason= query parameter.
+        reason = request.data.get('reason') or request.query_params.get('reason', '')
+        log_action(
+            request, AuditLog.DELETE, 'Invoice', instance.id, instance.invoice_number,
+            f"Deleted bill {instance.invoice_number} ({instance.payment_status}, total {instance.grand_total})",
+            reason=reason,
+            details={'before': invoice_snapshot(instance), 'stock_restored': True},
+        )
+
         # Restore stock for each item in the invoice
         for item in instance.items.all():
             if item.product:

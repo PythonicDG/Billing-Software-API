@@ -223,3 +223,53 @@ class AppRelease(models.Model):
             url = 'https://' + url[7:]
         return url
 
+
+
+class AuditLog(models.Model):
+    """
+    Append-only record of sensitive actions (bill deleted, edited, payment taken...).
+
+    The user and the entity are stored as text snapshots as well as a FK, so the
+    entry stays readable after the user or the bill itself is gone.
+    """
+    CREATE = 'CREATE'
+    UPDATE = 'UPDATE'
+    DELETE = 'DELETE'
+    PAYMENT = 'PAYMENT'
+
+    ACTION_CHOICES = [
+        (CREATE, 'Created'),
+        (UPDATE, 'Edited'),
+        (DELETE, 'Deleted'),
+        (PAYMENT, 'Payment recorded'),
+    ]
+
+    id = models.BigAutoField(primary_key=True)
+    timestamp = models.DateTimeField(default=timezone.now, db_index=True)
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
+        null=True, blank=True, related_name='audit_logs',
+    )
+    user_label = models.CharField(max_length=255, blank=True)   # "email (ROLE)" at the time
+    action = models.CharField(max_length=20, choices=ACTION_CHOICES, db_index=True)
+    entity_type = models.CharField(max_length=50, db_index=True)  # e.g. "Invoice"
+    entity_id = models.CharField(max_length=64, blank=True, db_index=True)
+    entity_label = models.CharField(max_length=255, blank=True)  # e.g. invoice number
+    summary = models.CharField(max_length=500)
+    reason = models.TextField(blank=True)
+    details = models.JSONField(default=dict, blank=True)  # before/after snapshots, changed fields
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['-timestamp', '-id']
+
+    def save(self, *args, **kwargs):
+        if self.pk is not None and not self._state.adding:
+            raise PermissionError("Audit log entries cannot be modified.")
+        super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise PermissionError("Audit log entries cannot be deleted.")
+
+    def __str__(self):
+        return f"{self.timestamp:%Y-%m-%d %H:%M:%S} {self.user_label or 'system'}: {self.summary}"
