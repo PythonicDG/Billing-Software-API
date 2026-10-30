@@ -15,9 +15,6 @@ class Invoice(models.Model):
 
     PAYMENT_METHOD_CHOICES = [
         ('CASH', 'Cash'),
-        ('CARD', 'Card'),
-        ('ONLINE', 'Online'),
-        ('CREDIT', 'Credit'),
         ('UPI', 'UPI'),
     ]
 
