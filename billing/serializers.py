@@ -6,6 +6,18 @@ from customers.models import Customer
 from .models import Invoice, InvoiceItem, Payment
 from .units import pieces_per_unit
 
+
+def customer_for_phone(phone, name):
+    """Find (or create) the customer for a phone number, same as update_or_create.
+
+    A soft-deleted customer still owns the phone number (it is unique in the DB),
+    so billing that number again brings the customer back instead of failing.
+    """
+    customer, _ = Customer.all_objects.update_or_create(phone=phone, defaults={'name': name})
+    if customer.is_deleted:
+        customer.restore()
+    return customer
+
 class PaymentSerializer(serializers.ModelSerializer):
     class Meta:
         model = Payment
@@ -13,6 +25,11 @@ class PaymentSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'payment_date']
 
 class InvoiceItemSerializer(serializers.ModelSerializer):
+    # all_objects so an old bill that contains a since-deleted product can still be
+    # edited; InvoiceSerializer.validate stops deleted products being added to bills.
+    product = serializers.PrimaryKeyRelatedField(
+        queryset=Product.all_objects.all(), allow_null=True, required=False)
+
     class Meta:
         model = InvoiceItem
         fields = ['id', 'product', 'unit', 'quantity', 'unit_price', 'total_price', 'product_name_snapshot', 'sku_snapshot', 'pieces_per_case']
@@ -49,6 +66,19 @@ class InvoiceSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['invoice_number', 'due_amount', 'outstanding_balance', 'payment_status', 'created_by', 'created_at']
 
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        # Deleted products can't be sold, except ones already on the bill being edited.
+        already_on_bill = set()
+        if self.instance is not None:
+            already_on_bill = {i.product_id for i in self.instance.items.all() if i.product_id}
+        for item in attrs.get('items') or []:
+            product = item.get('product')
+            if product is not None and product.is_deleted and product.id not in already_on_bill:
+                raise serializers.ValidationError(
+                    {'items': [f"Product '{product.name}' has been deleted."]})
+        return attrs
+
     def validate_paid_amount(self, value):
         if value < 0:
             raise serializers.ValidationError('Paid amount cannot be negative.')
@@ -62,10 +92,7 @@ class InvoiceSerializer(serializers.ModelSerializer):
 
         # Logic for creating/finding customer by phone
         if not customer and customer_phone:
-            customer, created = Customer.objects.update_or_create(
-                phone=customer_phone,
-                defaults={'name': customer_name}
-            )
+            customer = customer_for_phone(customer_phone, customer_name)
             validated_data['customer'] = customer
 
         with transaction.atomic():
@@ -115,7 +142,7 @@ class InvoiceSerializer(serializers.ModelSerializer):
                 # Deduct stock from Product
                 if product:
                     effective_quantity = quantity * pieces_per_unit(product, unit)
-                    Product.objects.filter(id=product.id).update(
+                    Product.all_objects.filter(id=product.id).update(
                         stock_quantity=F('stock_quantity') - effective_quantity
                     )
 
@@ -128,10 +155,7 @@ class InvoiceSerializer(serializers.ModelSerializer):
         
         # Logic for creating/finding customer by phone if updated
         if customer_phone:
-            customer, created = Customer.objects.update_or_create(
-                phone=customer_phone,
-                defaults={'name': customer_name or "Updated Customer"}
-            )
+            customer = customer_for_phone(customer_phone, customer_name or "Updated Customer")
             validated_data['customer'] = customer
 
         with transaction.atomic():
@@ -140,7 +164,7 @@ class InvoiceSerializer(serializers.ModelSerializer):
             for item in old_items:
                 if item.product:
                     effective_quantity = item.stock_quantity
-                    Product.objects.filter(id=item.product.id).update(
+                    Product.all_objects.filter(id=item.product.id).update(
                         stock_quantity=F('stock_quantity') + effective_quantity
                     )
 
@@ -160,7 +184,7 @@ class InvoiceSerializer(serializers.ModelSerializer):
                              for item in old_items:
                                  if item.product:
                                      eff = item.stock_quantity
-                                     Product.objects.filter(id=item.product.id).update(
+                                     Product.all_objects.filter(id=item.product.id).update(
                                          stock_quantity=F('stock_quantity') - eff
                                      )
                              raise serializers.ValidationError(
@@ -197,7 +221,7 @@ class InvoiceSerializer(serializers.ModelSerializer):
                     # Deduct stock for new items
                     if product:
                         effective_quantity = quantity * pieces_per_unit(product, unit)
-                        Product.objects.filter(id=product.id).update(
+                        Product.all_objects.filter(id=product.id).update(
                             stock_quantity=F('stock_quantity') - effective_quantity
                         )
             else:
@@ -206,7 +230,7 @@ class InvoiceSerializer(serializers.ModelSerializer):
                 for item in old_items:
                     if item.product:
                         eff = item.stock_quantity
-                        Product.objects.filter(id=item.product.id).update(
+                        Product.all_objects.filter(id=item.product.id).update(
                             stock_quantity=F('stock_quantity') - eff
                         )
 

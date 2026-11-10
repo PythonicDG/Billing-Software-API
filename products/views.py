@@ -10,6 +10,14 @@ from rest_framework.pagination import PageNumberPagination
 from .models import Product, Category
 from .serializers import ProductSerializer, CategorySerializer
 from django.db.models import Sum, F, Count, Q
+from core.audit import AuditedViewSetMixin, log_action
+from core.models import AuditLog
+
+PRODUCT_AUDIT_FIELDS = [
+    'name', 'brand', 'category', 'sku', 'purchase_price', 'selling_price', 'mrp',
+    'stock_quantity', 'min_stock_level', 'no_of_case', 'cent_in_per_cs',
+    'entry_mode', 'is_active', 'image',
+]
 
 class StandardResultsSetPagination(PageNumberPagination):
     """Custom pagination class for better Flutter integration."""
@@ -27,7 +35,7 @@ class StandardResultsSetPagination(PageNumberPagination):
         })
 
 
-class CategoryViewSet(viewsets.ModelViewSet):
+class CategoryViewSet(AuditedViewSetMixin, viewsets.ModelViewSet):
     """
     ViewSet for managing Categories .
     """
@@ -35,14 +43,23 @@ class CategoryViewSet(viewsets.ModelViewSet):
     serializer_class = CategorySerializer
     pagination_class = None  # No pagination for category dropdowns
 
+    audit_entity_type = 'Category'
+    audit_fields = ['name', 'description']
 
-class ProductViewSet(viewsets.ModelViewSet):
+
+class ProductViewSet(AuditedViewSetMixin, viewsets.ModelViewSet):
     """
     ViewSet for managing inventory .
     Features: Pagination, Search by name/brand/category, Sorting.
     """
     serializer_class = ProductSerializer
     pagination_class = StandardResultsSetPagination
+
+    audit_entity_type = 'Product'
+    audit_fields = PRODUCT_AUDIT_FIELDS
+
+    def audit_label(self, instance):
+        return f"{instance.name} [{instance.sku}]" if instance.sku else instance.name
     
     # Built-in search & ordering
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
@@ -260,6 +277,7 @@ class ProductViewSet(viewsets.ModelViewSet):
             created_count = 0
             updated_count = 0
             errors = []
+            created_names, updated_names = [], []
 
             from decimal import Decimal
             from products.models import Category, Product
@@ -310,7 +328,10 @@ class ProductViewSet(viewsets.ModelViewSet):
 
                 product = None
                 if sku:
-                    product = Product.objects.filter(sku=sku).first()
+                    product = Product.all_objects.filter(sku=sku).first()
+                    if product and product.is_deleted:
+                        errors.append(f"Row {row_idx}: SKU '{sku}' belongs to a deleted product. Restore it from the admin panel first.")
+                        continue
 
                 # Determine entry_mode based on cent_in_per_cs if possible, 
                 # but for bulk upload, default to 'cent' as existing data is cent-based.
@@ -328,7 +349,9 @@ class ProductViewSet(viewsets.ModelViewSet):
                     product.min_stock_level = min_stock
                     product.save()
                     updated_count += 1
+                    updated_names.append(name)
                 else:
+                    created_names.append(name)
                     Product.objects.create(
                         name=name,
                         brand=brand,
@@ -343,6 +366,17 @@ class ProductViewSet(viewsets.ModelViewSet):
                         entry_mode='cent' # Default for imported products
                     )
                     created_count += 1
+
+            if created_count or updated_count:
+                # One short entry per upload (names capped so a big file stays small).
+                log_action(
+                    request, AuditLog.CREATE if created_count else AuditLog.UPDATE,
+                    'Product', '', csv_file.name,
+                    f"Bulk upload {csv_file.name}: {created_count} created, {updated_count} updated",
+                    details={'created': created_names[:50], 'updated': updated_names[:50],
+                             'created_count': created_count, 'updated_count': updated_count,
+                             'error_count': len(errors)},
+                )
 
             return Response({
                 'success': True,

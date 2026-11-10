@@ -4,6 +4,8 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.authtoken.models import Token
 
+from core.audit import log_action
+from core.models import AuditLog
 from .models import User
 from .serializers import LoginSerializer, ChangePasswordSerializer
 
@@ -46,6 +48,8 @@ class ChangePasswordView(APIView):
         user = request.user
         user.set_password(serializer.validated_data['new_password'])
         user.save()
+        log_action(request, AuditLog.UPDATE, 'User', user.pk, user.email or user.username,
+                   'Changed own password')
 
         return Response({
             'success': True,

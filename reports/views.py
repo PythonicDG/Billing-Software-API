@@ -242,7 +242,7 @@ class CustomerInsightsView(APIView):
             date_from = request.query_params.get('date_from')
             date_to = request.query_params.get('date_to')
             
-            q = Q()
+            q = Q(invoices__is_deleted=False)  # joins skip managers, so exclude deleted bills here
             if date_from:
                 q &= Q(invoices__created_at__date__gte=date_from)
             if date_to:

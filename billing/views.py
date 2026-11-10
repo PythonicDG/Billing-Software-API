@@ -67,19 +67,25 @@ class InvoiceViewSet(viewsets.ModelViewSet):
             log_action(
                 self.request, AuditLog.CREATE, 'Invoice', invoice.id, invoice.invoice_number,
                 f"Created bill {invoice.invoice_number} (total {invoice.grand_total})",
-                details={'after': invoice_snapshot(invoice)},
+                details={
+                    'customer': invoice.customer.name if invoice.customer else 'Guest',
+                    'grand_total': str(invoice.grand_total),
+                    'amount_paid': str(invoice.amount_paid),
+                    'payment_method': invoice.payment_method,
+                    'item_count': invoice.items.count(),
+                },
             )
 
     def perform_update(self, serializer):
         with transaction.atomic():
             before = invoice_snapshot(serializer.instance)
             invoice = serializer.save()
-            after = invoice_snapshot(invoice)
+            diff = _changes(before, invoice_snapshot(invoice))
             log_action(
                 self.request, AuditLog.UPDATE, 'Invoice', invoice.id, invoice.invoice_number,
-                f"Edited bill {invoice.invoice_number}",
+                f"Edited bill {invoice.invoice_number}" + (f" ({', '.join(diff)})" if diff else ''),
                 reason=self.request.data.get('reason', ''),
-                details={'changes': _changes(before, after), 'before': before, 'after': after},
+                details={'changes': diff},
             )
 
     @action(detail=False, methods=['GET'])
@@ -469,18 +475,24 @@ class InvoiceViewSet(viewsets.ModelViewSet):
             request, AuditLog.DELETE, 'Invoice', instance.id, instance.invoice_number,
             f"Deleted bill {instance.invoice_number} ({instance.payment_status}, total {instance.grand_total})",
             reason=reason,
-            details={'before': invoice_snapshot(instance), 'stock_restored': True},
+            details={'before': invoice_snapshot(instance), 'stock_restored': True, 'soft_deleted': True},
         )
 
         # Restore stock for each item in the invoice
         for item in instance.items.all():
-            if item.product:
+            if item.product_id:
                 effective_quantity = item.stock_quantity
-                Product.objects.filter(id=item.product.id).update(
+                # all_objects: give stock back even if the product itself was deleted.
+                Product.all_objects.filter(id=item.product_id).update(
                     stock_quantity=F('stock_quantity') + effective_quantity
                 )
-                
+
         return super().destroy(request, *args, **kwargs)
+
+    def perform_destroy(self, instance):
+        # From the app a bill is only hidden (soft delete). It can be restored, or
+        # permanently deleted, from the Django admin.
+        instance.soft_delete(self.request.user)
 
 class InvoiceItemViewSet(viewsets.ReadOnlyModelViewSet):
     """Mostly for historical lookup or reporting."""

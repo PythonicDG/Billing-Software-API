@@ -8,13 +8,15 @@ from core.authentication import QueryParameterTokenAuthentication
 from .models import Customer
 from .serializers import CustomerSerializer
 from django.db import transaction, models
+from core.audit import AuditedViewSetMixin, log_action
+from core.models import AuditLog
 
 class LedgerPagination(PageNumberPagination):
     page_size = 20
     page_size_query_param = 'page_size'
     max_page_size = 100
 
-class CustomerViewSet(viewsets.ModelViewSet):
+class CustomerViewSet(AuditedViewSetMixin, viewsets.ModelViewSet):
     queryset = Customer.objects.all().order_by('-created_at')
     serializer_class = CustomerSerializer
     filter_backends = [filters.SearchFilter]
@@ -22,6 +24,12 @@ class CustomerViewSet(viewsets.ModelViewSet):
     authentication_classes = [TokenAuthentication, QueryParameterTokenAuthentication]
     search_fields = ['name', 'phone']
     ordering_fields = ['created_at', 'name']
+
+    audit_entity_type = 'Customer'
+    audit_fields = ['name', 'phone', 'email', 'address']
+
+    def audit_label(self, instance):
+        return f"{instance.name} ({instance.phone})"
 
     def destroy(self, request, *args, **kwargs):
         customer = self.get_object()
@@ -116,6 +124,7 @@ class CustomerViewSet(viewsets.ModelViewSet):
             invoices = customer.invoices.filter(amount_paid__lt=models.F('grand_total')).order_by('created_at')
             
             remaining_payment = amount
+            applied = []
             for invoice in invoices:
                 if remaining_payment <= 0:
                     break
@@ -132,8 +141,18 @@ class CustomerViewSet(viewsets.ModelViewSet):
                 
                 invoice.amount_paid = Decimal(invoice.amount_paid) + payment_to_apply
                 invoice.save()
+                applied.append({'invoice': invoice.invoice_number, 'amount': str(payment_to_apply)})
                 
                 remaining_payment -= payment_to_apply
+
+            if applied:
+                log_action(
+                    request, AuditLog.PAYMENT, 'Customer', customer.id,
+                    f"{customer.name} ({customer.phone})",
+                    f"Recorded {mode} bulk payment of {amount - remaining_payment} for {customer.name}",
+                    details={'amount': str(amount - remaining_payment), 'mode': mode,
+                             'notes': notes or '', 'applied_to': applied},
+                )
             
             # If there's still remaining_payment, it could be "advance payment"
             # In this simple system, we'll just return the remaining amount.

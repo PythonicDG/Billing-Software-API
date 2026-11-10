@@ -26,6 +26,17 @@ class ProductSerializer(serializers.ModelSerializer):
             'no_of_case', 'cent_in_per_cs', 'total_stock_in_cent', 'entry_mode'
         ]
 
+    def validate_sku(self, value):
+        # A soft-deleted product still owns its SKU (unique in the database).
+        if value:
+            deleted = Product.all_objects.filter(sku=value, is_deleted=True)
+            if self.instance is not None:
+                deleted = deleted.exclude(pk=self.instance.pk)
+            if deleted.exists():
+                raise serializers.ValidationError(
+                    'A deleted product has this SKU. Restore it from the admin panel.')
+        return value
+
     def validate_selling_price(self, value):
         if value <= 0:
             raise serializers.ValidationError('Selling price must be greater than zero.')

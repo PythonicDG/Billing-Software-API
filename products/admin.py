@@ -1,4 +1,5 @@
 from django.contrib import admin
+from core.admin_softdelete import SoftDeleteAdminMixin
 from .models import Product, Category
 
 
@@ -10,7 +11,7 @@ class CategoryAdmin(admin.ModelAdmin):
 
 
 @admin.register(Product)
-class ProductAdmin(admin.ModelAdmin):
+class ProductAdmin(SoftDeleteAdminMixin, admin.ModelAdmin):
     list_display = (
         'name', 'category', 'brand', 'selling_price', 
         'stock_quantity', 'is_low_stock_status', 'is_active'

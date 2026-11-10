@@ -3,6 +3,7 @@ import random
 import string
 from decimal import Decimal
 from django.db import models
+from core.softdelete import SoftDeleteModel
 
 
 def generate_unique_sku():
@@ -11,7 +12,8 @@ def generate_unique_sku():
     while True:
         code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=length))
         sku = f"FTK-{code}"
-        if not Product.objects.filter(sku=sku).exists():
+        # all_objects: a deleted product still owns its SKU (unique in the DB).
+        if not Product.all_objects.filter(sku=sku).exists():
             return sku
 
 
@@ -28,7 +30,7 @@ class Category(models.Model):
         return self.name
 
 
-class Product(models.Model):
+class Product(SoftDeleteModel):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     category = models.ForeignKey(
         Category,
@@ -82,7 +84,7 @@ class Product(models.Model):
             # Existing product: recalculate if stock-related fields changed
             # OR if it's currently out of stock (enables "Update" to act as a restock)
             try:
-                old = Product.objects.get(pk=self.pk)
+                old = Product.all_objects.get(pk=self.pk)
                 if (old.no_of_case != self.no_of_case or 
                     old.cent_in_per_cs != self.cent_in_per_cs or 
                     (old.stock_quantity <= 0 and self.no_of_case > 0)):

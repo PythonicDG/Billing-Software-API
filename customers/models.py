@@ -1,7 +1,8 @@
 import uuid
 from django.db import models
+from core.softdelete import SoftDeleteModel
 
-class Customer(models.Model):
+class Customer(SoftDeleteModel):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name = models.CharField(max_length=255)
     phone = models.CharField(max_length=15, unique=True, db_index=True)

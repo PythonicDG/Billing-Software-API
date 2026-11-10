@@ -1,6 +1,7 @@
 from rest_framework import viewsets, permissions, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from rest_framework.pagination import PageNumberPagination
 from .models import CompanySettings, DashboardAccessToken, AppRelease, AuditLog
 from .serializers import (
     CompanySettingsSerializer, 
@@ -9,6 +10,9 @@ from .serializers import (
     AppReleaseSerializer,
     AuditLogSerializer,
 )
+from .audit import log_action, snapshot, changes
+
+SETTINGS_AUDIT_FIELDS = ['name', 'address', 'phone', 'logo', 'gst_number', 'receipt_message']
 
 
 class CompanySettingsViewSet(viewsets.GenericViewSet):
@@ -26,7 +30,13 @@ class CompanySettingsViewSet(viewsets.GenericViewSet):
         settings = CompanySettings.get_settings()
         serializer = self.get_serializer(settings, data=request.data, partial=True)
         if serializer.is_valid():
+            before = snapshot(settings, SETTINGS_AUDIT_FIELDS)
             serializer.save()
+            diff = changes(before, snapshot(settings, SETTINGS_AUDIT_FIELDS))
+            if diff:
+                log_action(request, AuditLog.UPDATE, 'Settings', settings.pk, settings.name,
+                           f"Edited company settings ({', '.join(diff)})",
+                           details={'changes': diff})
             return Response(serializer.data)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
@@ -61,7 +71,11 @@ class DashboardPinViewSet(viewsets.GenericViewSet):
         serializer.is_valid(raise_exception=True)
 
         settings_obj = CompanySettings.get_settings()
+        had_pin = settings_obj.has_pin
         settings_obj.set_pin(serializer.validated_data['pin'])
+        log_action(request, AuditLog.UPDATE if had_pin else AuditLog.CREATE,
+                   'Dashboard PIN', settings_obj.pk, 'Dashboard PIN',
+                   'Changed dashboard PIN' if had_pin else 'Set dashboard PIN')
 
         return Response({
             'message': 'Dashboard PIN has been set successfully.',
@@ -118,7 +132,11 @@ class DashboardPinViewSet(viewsets.GenericViewSet):
     def remove_pin(self, request):
         """Remove the dashboard PIN entirely."""
         settings_obj = CompanySettings.get_settings()
+        had_pin = settings_obj.has_pin
         settings_obj.remove_pin()
+        if had_pin:
+            log_action(request, AuditLog.DELETE, 'Dashboard PIN', settings_obj.pk,
+                       'Dashboard PIN', 'Removed dashboard PIN')
 
         # Also revoke all active tokens since PIN is removed
         DashboardAccessToken.objects.filter(is_active=True).update(is_active=False)
@@ -159,14 +177,21 @@ class IsOwner(permissions.BasePermission):
         return bool(user and user.is_authenticated and (user.role == 'OWNER' or user.is_superuser))
 
 
+class AuditLogPagination(PageNumberPagination):
+    page_size = 50
+    page_size_query_param = 'page_size'
+    max_page_size = 200
+
+
 class AuditLogViewSet(viewsets.ReadOnlyModelViewSet):
     """
-    GET /api/core/audit-logs/ — Owner only, newest first.
+    GET /api/core/audit-logs/ — Owner only, newest first, 50 per page (?page=2).
     Filters: ?action=DELETE &entity_type=Invoice &entity_id= &user= &date_from=YYYY-MM-DD &date_to=YYYY-MM-DD &search=
     """
     queryset = AuditLog.objects.all()
     serializer_class = AuditLogSerializer
     permission_classes = [IsOwner]
+    pagination_class = AuditLogPagination
 
     def get_queryset(self):
         from django.db.models import Q

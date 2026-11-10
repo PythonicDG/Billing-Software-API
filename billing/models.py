@@ -5,8 +5,9 @@ from django.conf import settings
 from products.models import Product
 from customers.models import Customer
 from django.utils import timezone
+from core.softdelete import SoftDeleteModel, ActiveInvoiceChildManager
 
-class Invoice(models.Model):
+class Invoice(SoftDeleteModel):
     PAYMENT_STATUS_CHOICES = [
         ('UNPAID', 'Unpaid'),
         ('PARTIAL', 'Partially Paid'),
@@ -44,7 +45,8 @@ class Invoice(models.Model):
             
             # Find the highest existing number for today to get the next count
             # This is more robust than count() as it handles deletions correctly.
-            last_invoice = Invoice.objects.filter(
+            # all_objects: deleted bills keep their numbers, never reuse them.
+            last_invoice = Invoice.all_objects.filter(
                 invoice_number__startswith=f"INV-{today}-"
             ).order_by('-invoice_number').first()
             
@@ -55,7 +57,7 @@ class Invoice(models.Model):
                     count = last_count + 1
                 except (IndexError, ValueError):
                     # Fallback to count if the format is not as expected
-                    count = Invoice.objects.filter(created_at__date=local_now.date()).count() + 1
+                    count = Invoice.all_objects.filter(created_at__date=local_now.date()).count() + 1
             else:
                 count = 1
                 
@@ -126,6 +128,9 @@ class InvoiceItem(models.Model):
     unit_price = models.DecimalField(max_digits=12, decimal_places=2)
     total_price = models.DecimalField(max_digits=12, decimal_places=2)
 
+    objects = ActiveInvoiceChildManager()   # hides items of deleted bills (reports, top sellers)
+    all_objects = models.Manager()
+
     def save(self, *args, **kwargs):
         if self.product:
             brand_str = f" ({self.product.brand})" if self.product.brand else ""
@@ -181,6 +186,9 @@ class Payment(models.Model):
     mode = models.CharField(max_length=10, choices=PAYMENT_MODE_CHOICES)
     payment_date = models.DateTimeField(default=timezone.now)
     notes = models.TextField(blank=True, null=True)
+
+    objects = ActiveInvoiceChildManager()   # hides payments of deleted bills (cash/UPI totals)
+    all_objects = models.Manager()
 
     def __str__(self): 
         return f"Payment of {self.amount} for {self.invoice.invoice_number} ({self.mode})"
